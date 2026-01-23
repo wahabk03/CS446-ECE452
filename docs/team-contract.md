@@ -3,8 +3,8 @@
 ## Roles
 
 - Khan Wahab is our team lead, and is responsible for coordinating the project.
-- XXX is the technical lead, and is responsible for ensuring that the technical aspects of the project are completed correctly.
-- XXX is the Design Lead, and is responsible for the design and delivery of a core part of the product.
+- Jialun Li is the technical lead, and is responsible for ensuring that the technical aspects of the project are completed correctly.
+- Yim Sung Fung is the design lead, and is responsible for the design and delivery of a core part of the product.
 
 ## Communication
 
