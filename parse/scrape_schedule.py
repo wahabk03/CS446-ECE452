@@ -162,4 +162,19 @@ sess = "1261"
 # subjects = get_all_subjects("under", "1261")
 # print(subjects)
 courses = get_subject_courses(level, sess, "CS")
-print(courses)
+
+with open('scraped_schedule.txt','w+') as file:
+    for course in courses:
+        file.write(f"Subject: {course['subject']} | "
+                f"Catalog: {course['catalog']} | "
+                f"Units: {course['units']} | "
+                f"Title: {course['title']}\n")
+        for section in course['sections']:
+            file.write(f"Class: {section['class']} | "
+                f"Component: {section['component']} | "
+                f"Campus: {section['campus']} | "
+                f"Enrl_cap: {section['enrl_cap']} | "
+                f"Eenrl_tot: {section['enrl_tot']} | "
+                f"Wait_cap: {section['wait_cap']} | "
+                f"Wait_tot: {section['wait_tot']}\n")
+        file.write('\n')
