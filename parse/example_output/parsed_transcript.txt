@@ -1,0 +1,32 @@
+Student: Zhang, Edwin Antong
+SID:      20718692
+Program: Computer Science, Honours
+
+Term: Fall 2017 | Code: CS 137 | Description: Programming Principles | Attempted: 0.50 | Earned: 0.50 | Grade: 86
+Term: Fall 2017 | Code: ECE 105 | Description: Classical Mechanics | Attempted: 0.50 | Earned: 0.50 | Grade: 75
+Term: Fall 2017 | Code: MATH 115 | Description: Linear Algebra for Engineering | Attempted: 0.50 | Earned: 0.50 | Grade: 90
+Term: Fall 2017 | Code: MATH 117 | Description: Calculus 1 for Engineering | Attempted: 0.50 | Earned: 0.50 | Grade: 93
+Term: Fall 2017 | Code: MATH 135 | Description: Algebra for Honours Mathematics | Attempted: 0.50 | Earned: 0.50 | Grade: 87
+Term: Fall 2017 | Code: SE 101 | Description: Introduction to Methods of Software Engineering | Attempted: 0.25 | Earned: 0.25 | Grade: 98
+Term: Winter 2018 | Code: CS 138 | Description: Introduction to Data Abstraction and Implementation | Attempted: 0.50 | Earned: 0.50 | Grade: 89
+Term: Winter 2018 | Code: ECE 106 | Description: Electricity and Magnetism | Attempted: 0.50 | Earned: 0.50 | Grade: 72
+Term: Winter 2018 | Code: ECE 124 | Description: Digital Circuits and Systems | Attempted: 0.50 | Earned: 0.50 | Grade: 84
+Term: Winter 2018 | Code: ECE 140 | Description: Linear Circuits | Attempted: 0.50 | Earned: 0.50 | Grade: 75
+Term: Winter 2018 | Code: MATH 119 | Description: Calculus 2 for Engineering | Attempted: 0.50 | Earned: 0.50 | Grade: 87
+Term: Spring 2018 | Code: COOP 1 | Description: Co-operative Work Term | Attempted: 0.50 | Earned: 0.00 | Grade: CR
+Term: Fall 2018 | Code: CHE 102 | Description: Chemistry for Engineers | Attempted: 0.50 | Earned: 0.50 | Grade: 84
+Term: Fall 2018 | Code: CS 241E | Description: Foundations of Sequential Programs (Enriched) | Attempted: 0.50 | Earned: 0.50 | Grade: 78
+Term: Fall 2018 | Code: ECE 222 | Description: Digital Computers | Attempted: 0.50 | Earned: 0.50 | Grade: 89
+Term: Fall 2018 | Code: SE 212 | Description: Logic and Computation | Attempted: 0.50 | Earned: 0.50 | Grade: 73
+Term: Fall 2018 | Code: SMF 213 | Description: Sexual Health and Well-Being | Attempted: 0.50 | Earned: 0.50 | Grade: 83
+Term: Fall 2018 | Code: SPCOM 223 | Description: Public Speaking | Attempted: 0.50 | Earned: 0.50 | Grade: 85
+Term: Fall 2018 | Code: STAT 206 | Description: Statistics for Software Engineering | Attempted: 0.50 | Earned: 0.50 | Grade: 86
+Term: Winter 2019 | Code: COOP 2 | Description: Co-operative Work Term | Attempted: 0.50 | Earned: 0.00 | Grade: CR
+Term: Spring 2019 | Code: CS 240 | Description: Data Structures and Data Management | Attempted: 0.50 | Earned: 0.50 | Grade: 85
+Term: Spring 2019 | Code: CS 247 | Description: Software Engineering Principles | Attempted: 0.50 | Earned: 0.50 | Grade: 89
+Term: Spring 2019 | Code: EARTH 121 | Description: Introductory Earth Sciences | Attempted: 0.50 | Earned: 0.50 | Grade: 83
+Term: Spring 2019 | Code: ECE 358 | Description: Computer Networks | Attempted: 0.50 | Earned: 0.50 | Grade: 80
+Term: Spring 2019 | Code: MATH 239 | Description: Introduction to Combinatorics | Attempted: 0.50 | Earned: 0.50 | Grade: 74
+Term: Spring 2019 | Code: WKRPT 200 | Description: Work-term Report | Attempted: 0.13 | Earned: 0.13 | Grade: 95
+Term: Fall 2019 | Code: COOP 3 | Description: Co-operative Work Term | Attempted: 0.50 | Earned: 0.00 | Grade: CR
+Term: Fall 2019 | Code: PD 10 | Description: Professional Responsibility in Computing | Attempted: 0.50 | Earned: 0.50 | Grade: CR

@@ -1,0 +1,99 @@
+GO!
+
+ 
+Go To
+Cheuk Him Ariel Wong
+My Academics
+Course Selection (Undergrad only)
+Search for Classes
+Enroll
+ 	My Class Schedule	 	 	|	 	 	Shopping Cart	 	 	|	 	 	Add	 	 	|	 	 	Drop	 	 	|	 	 	Swap	 	 	|	 	 	Edit	 	 	|	 	 	Term Information	 	 	|	 	 	Exam Information	 
+My Class Schedule
+Select Display Option
+List View
+Weekly Calendar View
+Winter 2026 | Undergraduate | University of Waterloo
+Group Box
+Class Schedule Filter Options Collapsible section Class Schedule Filter Options 
+Show Enrolled Classes
+Show Dropped Classes
+Show Waitlisted Classes
+CS 446 - Software Design & Archit
+Status	Units	Grading	Grade	Deadlines
+Enrolled
+0.50
+Numeric Grading Basis
+Academic Calendar Deadlines
+Class Nbr	Section	Component	Days & Times	Room	Instructor	Start/End Date
+6426
+002
+LEC
+MW 16:00 - 17:20
+MC 2065
+Pengyu Nie
+05/01/2026 - 06/04/2026
+CS 480 - Intro Machine Learning
+Status	Units	Grading	Grade	Deadlines
+Enrolled
+0.50
+Numeric Grading Basis
+Academic Calendar Deadlines
+Class Nbr	Section	Component	Days & Times	Room	Instructor	Start/End Date
+6207
+002
+LEC
+TTh 16:00 - 17:20
+MC 2034
+Marina Meila
+05/01/2026 - 06/04/2026
+MUSIC 100 - Understanding Music
+Status	Units	Grading	Grade	Deadlines
+Enrolled
+0.50
+Numeric Grading Basis
+Academic Calendar Deadlines
+Class Nbr	Section	Component	Days & Times	Room	Instructor	Start/End Date
+4397
+001
+LEC
+TTh 11:30 - 12:50
+CGR 1111
+Marina Gallagher
+05/01/2026 - 06/04/2026
+PMATH 340 - Elementary Number Theory
+Status	Units	Grading	Grade	Deadlines
+Enrolled
+0.50
+Numeric Grading Basis
+Academic Calendar Deadlines
+Class Nbr	Section	Component	Days & Times	Room	Instructor	Start/End Date
+5766
+001
+LEC
+MWF 13:30 - 14:20
+MC 4042
+Michael Rubinstein
+05/01/2026 - 06/04/2026
+STAT 333 - Stochastic Processes 1
+Status	Units	Grading	Grade	Deadlines
+Enrolled
+0.50
+Numeric Grading Basis
+Academic Calendar Deadlines
+Class Nbr	Section	Component	Days & Times	Room	Instructor	Start/End Date
+5774
+001
+LEC
+TTh 14:30 - 15:50
+HH 1101
+Jeffrey Negrea
+05/01/2026 - 06/04/2026
+5775
+101
+TUT
+F 12:30 - 13:20
+DC 1350
+Jeffrey Negrea
+05/01/2026 - 06/04/2026
+Printer Friendly Page
+Go to top iconGo to top
