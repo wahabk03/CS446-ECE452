@@ -1,0 +1,14 @@
+Term: Winter 2026 | Code: CS 446 | Description: Software Design & Archit | Status: Enrolled | Units: 0.50
+    Class Nbr: 6426 | Section: 002 | Component: LEC | Days & Times: MW 16:00 - 17:20 | Room: MC 2065 | Instructor: Pengyu Nie | Dates: 05/01/2026 - 06/04/2026
+Term: Winter 2026 | Code: CS 480 | Description: Intro Machine Learning | Status: Enrolled | Units: 0.50
+    Class Nbr: 6207 | Section: 002 | Component: LEC | Days & Times: TTh 16:00 - 17:20 | Room: MC 2034 | Instructor: Marina Meila | Dates: 05/01/2026 - 06/04/2026
+Term: Winter 2026 | Code: MUSIC 100 | Description: Understanding Music | Status: Enrolled | Units: 0.50
+    Class Nbr: 4397 | Section: 001 | Component: LEC | Days & Times: TTh 11:30 - 12:50 | Room: CGR 1111 | Instructor: Marina Gallagher | Dates: 05/01/2026 - 06/04/2026
+Term: Winter 2026 | Code: PMATH 340 | Description: Elementary Number Theory | Status: Enrolled | Units: 0.50
+    Class Nbr: 5766 | Section: 001 | Component: LEC | Days & Times: MWF 13:30 - 14:20 | Room: MC 4042 | Instructor: Michael Rubinstein | Dates: 05/01/2026 - 06/04/2026
+Term: Winter 2026 | Code: STAT 333 | Description: Stochastic Processes 1 | Status: Enrolled | Units: 0.50
+    Class Nbr: 5774 | Section: 001 | Component: LEC | Days & Times: TTh 14:30 - 15:50 | Room: HH 1101 | Instructor: Jeffrey Negrea | Dates: 05/01/2026 - 06/04/2026
+    Class Nbr: 5775 | Section: 101 | Component: TUT | Days & Times: F 12:30 - 13:20 | Room: DC 1350 | Instructor: Jeffrey Negrea | Dates: 05/01/2026 - 06/04/2026
+Term: Winter 2026 | Code: STAT 333 | Description: Stochastic Processes 1 | Status: Enrolled | Units: 0.50
+    Class Nbr: 5774 | Section: 001 | Component: LEC | Days & Times: TTh 14:30 - 15:50 | Room: HH 1101 | Instructor: Jeffrey Negrea | Dates: 05/01/2026 - 06/04/2026
+    Class Nbr: 5775 | Section: 101 | Component: TUT | Days & Times: F 12:30 - 13:20 | Room: DC 1350 | Instructor: Jeffrey Negrea | Dates: 05/01/2026 - 06/04/2026

@@ -105,8 +105,7 @@ def parse_current_schedule(text: str):
                     continue
 
             if current_section['DaysTimes'] is None:
-                # e.g. TTh 14:30 - 15:50  or  MWF 13:30 - 14:20
-                if re.search(r'[MTWRF]+\s+\d{2}:\d{2}\s*-\s*\d{2}:\d{2}', line):
+                if re.match(r'^[A-Z]{2,4}\s*\d{4}$|^[A-Z]{3}\s*\d{4}$', line) or ' ' in line:
                     current_section['DaysTimes'] = line
                     continue
 
@@ -146,6 +145,29 @@ with open("parse/test_file/current_schedule.txt", "r") as f:
 
 parsed_current_schedule = parse_current_schedule(current_schedule)
 
+with open("parse/example_output/parsed_current_schedule.txt", "w+", encoding="utf-8") as file:
+    for course in parsed_current_schedule:
+        file.write(
+            f"Term: {course['Term'] or '-'} | "
+            f"Code: {course['Code']} | "
+            f"Description: {course['Description'] or '-'} | "
+            f"Status: {course['Status'] or '-'} | "
+            f"Units: {course['Units'] or '-'}\n"
+        )
+
+        # Show sections (LEC, TUT, etc.)
+        if course['Sections']:
+            for sec in course['Sections']:
+                file.write(
+                    f"    Class Nbr: {sec.get('ClassNbr', '-')} | "
+                    f"Section: {sec.get('Section', '-')} | "
+                    f"Component: {sec.get('Component', '-')} | "
+                    f"Days & Times: {sec.get('DaysTimes', '-')} | "
+                    f"Room: {sec.get('Room', '-')} | "
+                    f"Instructor: {sec.get('Instructor', '-')} | "
+                    f"Dates: {sec.get('Dates', '-')}\n"
+                )
+
 json_string = json.dumps(parsed_current_schedule,indent=4)
 
-print(json_string)
+# print(json_string)
