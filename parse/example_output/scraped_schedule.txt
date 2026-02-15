@@ -1,0 +1,360 @@
+Subject: CS | Catalog: 100 | Units: 0.5 | Title: Intro Computing Through Applic
+Class: 6469 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 64 | Eenrl_tot: 50 | Wait_cap: 0 | Wait_tot: 0
+Class: 8733 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 64 | Eenrl_tot: 61 | Wait_cap: 0 | Wait_tot: 0
+Class: 6529 | Component: LAB 101 | Campus: UW    U | Enrl_cap: 32 | Eenrl_tot: 29 | Wait_cap: 0 | Wait_tot: 0
+Class: 6530 | Component: LAB 102 | Campus: UW    U | Enrl_cap: 32 | Eenrl_tot: 31 | Wait_cap: 0 | Wait_tot: 0
+Class: 6531 | Component: LAB 103 | Campus: UW    U | Enrl_cap: 32 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+Class: 6532 | Component: LAB 104 | Campus: UW    U | Enrl_cap: 32 | Eenrl_tot: 21 | Wait_cap: 0 | Wait_tot: 0
+Class: 6533 | Component: TST 201 | Campus: UW    U | Enrl_cap: 128 | Eenrl_tot: 111 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 105 | Units: 0.5 | Title: Intro Computer Programming 1
+Class: 6204 | Component: LEC 001 | Campus: ONLN  ONLINE | Enrl_cap: 90 | Eenrl_tot: 74 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 106 | Units: 0.5 | Title: Intro Computer Programming 2
+Class: 6159 | Component: LEC 001 | Campus: ONLN  ONLINE | Enrl_cap: 200 | Eenrl_tot: 147 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 114 | Units: 0.5 | Title: Computing Principles (Sci)
+Class: 6396 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 120 | Eenrl_tot: 85 | Wait_cap: 0 | Wait_tot: 0
+Class: 6397 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 43 | Wait_cap: 0 | Wait_tot: 0
+Class: 6470 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 42 | Wait_cap: 0 | Wait_tot: 0
+Class: 6398 | Component: TST 201 | Campus: UW    U | Enrl_cap: 120 | Eenrl_tot: 85 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 115 | Units: 0.5 | Title: Intro Computer Science 1
+Class: 6337 | Component: LEC 001 | Campus: ONLN  ONLINE | Enrl_cap: 260 | Eenrl_tot: 251 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 116 | Units: 0.5 | Title: Intro Computer Science 2
+Class: 5953 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 104 | Eenrl_tot: 95 | Wait_cap: 0 | Wait_tot: 0
+Class: 5954 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 104 | Eenrl_tot: 95 | Wait_cap: 0 | Wait_tot: 0
+Class: 6116 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 122 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 6117 | Component: LEC 004 | Campus: UW    U | Enrl_cap: 122 | Eenrl_tot: 83 | Wait_cap: 0 | Wait_tot: 0
+Class: 5955 | Component: LEC 005 | Campus: UW    U | Enrl_cap: 104 | Eenrl_tot: 99 | Wait_cap: 0 | Wait_tot: 0
+Class: 7635 | Component: LEC 006 | Campus: UW    U | Enrl_cap: 104 | Eenrl_tot: 68 | Wait_cap: 0 | Wait_tot: 0
+Class: 6399 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+Class: 6400 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 60 | Wait_cap: 0 | Wait_tot: 0
+Class: 6401 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 60 | Wait_cap: 0 | Wait_tot: 0
+Class: 6402 | Component: TUT 104 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 59 | Wait_cap: 0 | Wait_tot: 0
+Class: 6403 | Component: TUT 105 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 53 | Wait_cap: 0 | Wait_tot: 0
+Class: 6404 | Component: TUT 106 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 50 | Wait_cap: 0 | Wait_tot: 0
+Class: 6405 | Component: TUT 107 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 50 | Wait_cap: 0 | Wait_tot: 0
+Class: 6406 | Component: TUT 108 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 42 | Wait_cap: 0 | Wait_tot: 0
+Class: 7636 | Component: TUT 109 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 33 | Wait_cap: 0 | Wait_tot: 0
+Class: 7637 | Component: TUT 110 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 42 | Wait_cap: 0 | Wait_tot: 0
+Class: 6407 | Component: TST 201 | Campus: UW    U | Enrl_cap: 660 | Eenrl_tot: 507 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 135 | Units: 0.5 | Title: Designing Functional Programs
+Class: 5956 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 125 | Eenrl_tot: 128 | Wait_cap: 0 | Wait_tot: 0
+Class: 5957 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 5958 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 61 | Wait_cap: 0 | Wait_tot: 0
+Class: 5959 | Component: TST 201 | Campus: UW    U | Enrl_cap: 125 | Eenrl_tot: 128 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 136 | Units: 0.5 | Title: Elem Algo Dsgn & Data Abstrac
+Class: 5912 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 51 | Wait_cap: 0 | Wait_tot: 0
+Class: 5960 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 89 | Wait_cap: 0 | Wait_tot: 0
+Class: 5961 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 98 | Wait_cap: 0 | Wait_tot: 0
+Class: 5988 | Component: LEC 004 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+Class: 6032 | Component: LEC 005 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 44 | Wait_cap: 0 | Wait_tot: 0
+Class: 6096 | Component: LEC 006 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 90 | Wait_cap: 0 | Wait_tot: 0
+Class: 6118 | Component: LEC 007 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 88 | Wait_cap: 0 | Wait_tot: 0
+Class: 6430 | Component: LEC 008 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+Class: 6431 | Component: LEC 009 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 65 | Wait_cap: 0 | Wait_tot: 0
+Class: 8734 | Component: LEC 010 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 73 | Wait_cap: 0 | Wait_tot: 0
+Class: 7638 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 7639 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 70 | Wait_cap: 0 | Wait_tot: 0
+Class: 7640 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 70 | Wait_cap: 0 | Wait_tot: 0
+Class: 7641 | Component: TUT 104 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 71 | Wait_cap: 0 | Wait_tot: 0
+Class: 7642 | Component: TUT 105 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 71 | Wait_cap: 0 | Wait_tot: 0
+Class: 7643 | Component: TUT 106 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 7644 | Component: TUT 107 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 55 | Wait_cap: 0 | Wait_tot: 0
+Class: 7645 | Component: TUT 108 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 62 | Wait_cap: 0 | Wait_tot: 0
+Class: 7646 | Component: TUT 109 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 41 | Wait_cap: 0 | Wait_tot: 0
+Class: 7647 | Component: TUT 110 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 54 | Wait_cap: 0 | Wait_tot: 0
+Class: 7648 | Component: TUT 111 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 51 | Wait_cap: 0 | Wait_tot: 0
+Class: 7649 | Component: TUT 112 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 41 | Wait_cap: 0 | Wait_tot: 0
+Class: 8735 | Component: TUT 113 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 36 | Wait_cap: 0 | Wait_tot: 0
+Class: 5943 | Component: TST 201 | Campus: UW    U | Enrl_cap: 920 | Eenrl_tot: 755 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 136L | Units: 0.25 | Title: Tools & Tech for Software Dev
+Class: 6366 | Component: LAB 001 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 64 | Wait_cap: 0 | Wait_tot: 0
+Class: 6367 | Component: LAB 002 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 36 | Wait_cap: 0 | Wait_tot: 0
+Class: 6368 | Component: LAB 003 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 56 | Wait_cap: 0 | Wait_tot: 0
+Class: 6369 | Component: LAB 004 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 65 | Wait_cap: 0 | Wait_tot: 0
+Class: 6370 | Component: LAB 005 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 56 | Wait_cap: 0 | Wait_tot: 0
+Class: 6371 | Component: LAB 006 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 64 | Wait_cap: 0 | Wait_tot: 0
+Class: 6372 | Component: LAB 007 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 29 | Wait_cap: 0 | Wait_tot: 0
+Class: 6373 | Component: LAB 008 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 28 | Wait_cap: 0 | Wait_tot: 0
+Class: 6374 | Component: LAB 009 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+Class: 6375 | Component: LAB 010 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 55 | Wait_cap: 0 | Wait_tot: 0
+Class: 6376 | Component: LAB 011 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 35 | Wait_cap: 0 | Wait_tot: 0
+Class: 6432 | Component: LAB 012 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 65 | Wait_cap: 0 | Wait_tot: 0
+Class: 6433 | Component: LAB 013 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 61 | Wait_cap: 0 | Wait_tot: 0
+Class: 6434 | Component: LAB 014 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 37 | Wait_cap: 0 | Wait_tot: 0
+Class: 6435 | Component: LAB 015 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 0 | Wait_cap: 0 | Wait_tot: 0
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: 8751 | Component: LAB 016 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+Class: 8752 | Component: LAB 017 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 64 | Wait_cap: 0 | Wait_tot: 0
+Class: 8753 | Component: LAB 018 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 64 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 138 | Units: 0.5 | Title: Intro Data Abstract & Implem
+Class: 5951 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 150 | Eenrl_tot: 135 | Wait_cap: 0 | Wait_tot: 0
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: 5952 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 68 | Wait_cap: 0 | Wait_tot: 0
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: 6422 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: 6522 | Component: TST 201 | Campus: UW    U | Enrl_cap: 150 | Eenrl_tot: 135 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 146 | Units: 0.5 | Title: Algo Dsgn & Data Abstrac (Adv)
+Class: 6021 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+Class: 6041 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+Class: 6239 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 38 | Wait_cap: 0 | Wait_tot: 0
+Class: 6240 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 38 | Wait_cap: 0 | Wait_tot: 0
+Class: 6023 | Component: TST 201 | Campus: UW    U | Enrl_cap: 200 | Eenrl_tot: 118 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 200 | Units: 0.5 | Title: Concept for Adv Computer Usage
+Class: 6172 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 120 | Eenrl_tot: 94 | Wait_cap: 0 | Wait_tot: 0
+Class: 6173 | Component: LAB 101 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+Class: 6174 | Component: LAB 102 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 36 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 230 | Units: 0.5 | Title: Intro Computers & Comp Sys
+Class: 5780 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 140 | Eenrl_tot: 55 | Wait_cap: 0 | Wait_tot: 0
+Class: 6289 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 140 | Eenrl_tot: 110 | Wait_cap: 0 | Wait_tot: 0
+Class: 5781 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 39 | Wait_cap: 0 | Wait_tot: 0
+Class: 5782 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 45 | Wait_cap: 0 | Wait_tot: 0
+Class: 6119 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 81 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 240 | Units: 0.5 | Title: Data Structures & Data Mgmt
+Class: 5783 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 100 | Wait_cap: 0 | Wait_tot: 0
+Class: 5970 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 72 | Wait_cap: 0 | Wait_tot: 0
+Class: 8736 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 68 | Wait_cap: 0 | Wait_tot: 0
+Class: 6042 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 65 | Wait_cap: 0 | Wait_tot: 0
+Class: 6043 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 46 | Wait_cap: 0 | Wait_tot: 0
+Class: 6044 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 63 | Wait_cap: 0 | Wait_tot: 0
+Class: 8737 | Component: TUT 104 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 5868 | Component: TST 201 | Campus: UW    U | Enrl_cap: 280 | Eenrl_tot: 240 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 240E | Units: 0.5 | Title: Data Structure & Mgmt (Enrich)
+Class: 6290 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 43 | Wait_cap: 0 | Wait_tot: 0
+Class: 6291 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 43 | Wait_cap: 0 | Wait_tot: 0
+Class: 6292 | Component: TST 201 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 43 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 241 | Units: 0.5 | Title: Found of Sequential Programs
+Class: 5928 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6534 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 90 | Wait_cap: 0 | Wait_tot: 0
+Class: 8738 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 78 | Wait_cap: 0 | Wait_tot: 0
+Class: 5784 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 5785 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 46 | Wait_cap: 0 | Wait_tot: 0
+Class: 5929 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 68 | Wait_cap: 0 | Wait_tot: 0
+Class: 8739 | Component: TUT 104 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 63 | Wait_cap: 0 | Wait_tot: 0
+Class: 5869 | Component: TST 201 | Campus: UW    U | Enrl_cap: 280 | Eenrl_tot: 243 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 245 | Units: 0.5 | Title: Logic & Computation
+Class: 5902 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 110 | Eenrl_tot: 95 | Wait_cap: 0 | Wait_tot: 0
+Class: 6059 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 55 | Eenrl_tot: 42 | Wait_cap: 0 | Wait_tot: 0
+Class: 6471 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 55 | Eenrl_tot: 53 | Wait_cap: 0 | Wait_tot: 0
+Class: 5880 | Component: TST 201 | Campus: UW    U | Enrl_cap: 110 | Eenrl_tot: 95 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 246 | Units: 0.5 | Title: Obj-Oriented Soft Dev
+Class: 5786 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 6060 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 5787 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 36 | Wait_cap: 0 | Wait_tot: 0
+Class: 6045 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 40 | Wait_cap: 0 | Wait_tot: 0
+Class: 6061 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 57 | Wait_cap: 0 | Wait_tot: 0
+Class: 5870 | Component: TST 201 | Campus: UW    U | Enrl_cap: 180 | Eenrl_tot: 133 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 251 | Units: 0.5 | Title: Computer Organization & Design
+Class: 5788 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 78 | Wait_cap: 0 | Wait_tot: 0
+Class: 6004 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 87 | Wait_cap: 0 | Wait_tot: 0
+Class: 8741 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 78 | Wait_cap: 0 | Wait_tot: 0
+Class: 6334 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 88 | Wait_cap: 0 | Wait_tot: 0
+Class: 6335 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 78 | Wait_cap: 0 | Wait_tot: 0
+Class: 8742 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+Class: 5871 | Component: TST 201 | Campus: UW    U | Enrl_cap: 270 | Eenrl_tot: 243 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 330 | Units: 0.5 | Title: Management Information Systems
+Class: 5789 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 125 | Eenrl_tot: 52 | Wait_cap: 0 | Wait_tot: 0
+Class: 6097 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 125 | Eenrl_tot: 101 | Wait_cap: 0 | Wait_tot: 0
+Class: 6203 | Component: LEC 003 | Campus: ONLN  ONLINE | Enrl_cap: 190 | Eenrl_tot: 125 | Wait_cap: 0 | Wait_tot: 0
+Class: 6511 | Component: TST 102 | Campus: ONLN  ONLINE | Enrl_cap: 190 | Eenrl_tot: 125 | Wait_cap: 0 | Wait_tot: 0
+Class: 6512 | Component: TUT 201 | Campus: ONLN  ONLINE | Enrl_cap: 190 | Eenrl_tot: 125 | Wait_cap: 0 | Wait_tot: 0
+Class: 6331 | Component: TST 101 | Campus: UW    U | Enrl_cap: 250 | Eenrl_tot: 153 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 335 | Units: 0.5 | Title: Comp Meth in Bus & Fin
+Class: 6160 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 110 | Eenrl_tot: 89 | Wait_cap: 0 | Wait_tot: 0
+Class: 6343 | Component: TST 101 | Campus: UW    U | Enrl_cap: 110 | Eenrl_tot: 89 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 338 | Units: 0.5 | Title: Comp Applic in Bus Databases
+Class: 5790 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 96 | Wait_cap: 0 | Wait_tot: 0
+Class: 6296 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 100 | Eenrl_tot: 85 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 341 | Units: 0.5 | Title: Algorithms
+Class: 5791 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6051 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 87 | Wait_cap: 0 | Wait_tot: 0
+Class: 6098 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6155 | Component: LEC 004 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 49 | Wait_cap: 0 | Wait_tot: 0
+Class: 8743 | Component: LEC 005 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+Class: 6210 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6211 | Component: TUT 102 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 79 | Wait_cap: 0 | Wait_tot: 0
+Class: 6212 | Component: TUT 103 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 60 | Wait_cap: 0 | Wait_tot: 0
+Class: 6213 | Component: TUT 104 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 88 | Wait_cap: 0 | Wait_tot: 0
+Class: 8744 | Component: TUT 105 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 64 | Wait_cap: 0 | Wait_tot: 0
+Class: 6120 | Component: TST 201 | Campus: UW    U | Enrl_cap: 420 | Eenrl_tot: 366 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 343 | Units: 0.5 | Title: Concurrent & Parallel Program
+Class: 5888 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+Class: 6482 | Component: TST 101 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 346 | Units: 0.5 | Title: Application Development
+Class: 6409 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 82 | Wait_cap: 0 | Wait_tot: 0
+Class: 6411 | Component: LAB 101 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 82 | Wait_cap: 0 | Wait_tot: 0
+Class: 6410 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6412 | Component: LAB 102 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 348 | Units: 0.5 | Title: Intro Database Management
+Class: 5800 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 31 | Wait_cap: 0 | Wait_tot: 0
+Class: 6161 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 21 | Wait_cap: 0 | Wait_tot: 0
+Class: 6421 | Component: TST 101 | Campus: UW    U | Enrl_cap: 180 | Eenrl_tot: 52 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 349 | Units: 0.5 | Title: User Interfaces
+Class: 5895 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+Class: 6062 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 90 | Wait_cap: 0 | Wait_tot: 0
+Class: 6535 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 6481 | Component: TST 101 | Campus: UW    U | Enrl_cap: 270 | Eenrl_tot: 233 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 350 | Units: 0.5 | Title: Operating Systems
+Class: 5889 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 90 | Wait_cap: 0 | Wait_tot: 0
+Class: 5890 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 89 | Wait_cap: 0 | Wait_tot: 0
+Class: 6162 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 75 | Wait_cap: 0 | Wait_tot: 0
+Class: 6354 | Component: TST 101 | Campus: UW    U | Enrl_cap: 270 | Eenrl_tot: 254 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 365 | Units: 0.5 | Title: Models of Computation
+Class: 5881 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 39 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 370 | Units: 0.5 | Title: Numerical Computation
+Class: 5792 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 79 | Wait_cap: 0 | Wait_tot: 0
+Class: 6099 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 73 | Wait_cap: 0 | Wait_tot: 0
+Class: 8746 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+Class: 6420 | Component: TST 101 | Campus: UW    U | Enrl_cap: 240 | Eenrl_tot: 232 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 371 | Units: 0.5 | Title: Intro Computational Math
+Class: 5891 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 44 | Wait_cap: 0 | Wait_tot: 0
+Class: 6624 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+Class: 8726 | Component: TST 101 | Campus: UW    U | Enrl_cap: 160 | Eenrl_tot: 121 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 383 | Units: 0.5 | Title: Computational Digi Art Studio
+Class: 7650 | Component: STU 001 | Campus: UW    U | Enrl_cap: 40 | Eenrl_tot: 14 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 431 | Units: 0.5 | Title: Data-Intense Distrib Analytics
+Class: 6205 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 88 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 436 | Units: 0.5 | Title: Networks & Distrib Comp Sys
+Class: 5793 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 61 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 442 | Units: 0.5 | Title: Princ of Programming Languages
+Class: 5794 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 40 | Wait_cap: 0 | Wait_tot: 0
+Class: 8494 | Component: TST 101 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 40 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 444 | Units: 0.5 | Title: Compiler Construction
+Class: 5795 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 54 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 445 | Units: 0.5 | Title: Software Req Specif & Analysis
+Class: 5796 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 16 | Wait_cap: 0 | Wait_tot: 0
+Class: 5797 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 16 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 446 | Units: 0.5 | Title: Software Design & Archit
+Class: 6244 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+Class: 6426 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 39 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 447 | Units: 0.5 | Title: Software Test, QA & Maint
+Class: 8705 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 40 | Eenrl_tot: 20 | Wait_cap: 0 | Wait_tot: 0
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: &nbsp | Component: &nbsp | Campus: &nbsp | Enrl_cap: &nbsp | Eenrl_tot: &nbsp | Wait_cap: &nbsp | Wait_tot: &nbsp
+Class: 8707 | Component: TUT 101 | Campus: UW    U | Enrl_cap: 40 | Eenrl_tot: 20 | Wait_cap: 0 | Wait_tot: 0
+Class: 8708 | Component: LAB 201 | Campus: UW    U | Enrl_cap: 40 | Eenrl_tot: 20 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 450 | Units: 0.5 | Title: Computer Architecture
+Class: 5801 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 65 | Eenrl_tot: 41 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 451 | Units: 0.5 | Title: Data-Intense Distrib Computing
+Class: 6176 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 90 | Eenrl_tot: 87 | Wait_cap: 0 | Wait_tot: 0
+Class: 6428 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 87 | Eenrl_tot: 80 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 452 | Units: 0.5 | Title: Real-Time Programming
+Class: 6424 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 58 | Eenrl_tot: 32 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 453 | Units: 0.5 | Title: Software & Systems Security
+Class: 6536 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 21 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 454 | Units: 0.5 | Title: Distributed Systems
+Class: 5879 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 6046 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 60 | Wait_cap: 0 | Wait_tot: 0
+Class: 8748 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 456 | Units: 0.5 | Title: Computer Networks
+Class: 5802 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 68 | Wait_cap: 0 | Wait_tot: 0
+Class: 6100 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+Class: 6340 | Component: TST 101 | Campus: UW    U | Enrl_cap: 140 | Eenrl_tot: 126 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 459 | Units: 0.5 | Title: Privacy, Crypto & Security
+Class: 6537 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 59 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 467 | Units: 0.5 | Title: Intro Quantum Info Processing
+Class: 8581 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 40 | Eenrl_tot: 19 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 476 | Units: 0.5 | Title: Num Computation: Fin Modelling
+Class: 5930 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+Class: 6600 | Component: TST 101 | Campus: UW    U | Enrl_cap: 80 | Eenrl_tot: 77 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 479 | Units: 0.5 | Title: Neural Networks
+Class: 6293 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 6490 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 66 | Wait_cap: 0 | Wait_tot: 0
+Class: 8747 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 67 | Wait_cap: 0 | Wait_tot: 0
+Class: 6583 | Component: TST 101 | Campus: UW    U | Enrl_cap: 210 | Eenrl_tot: 199 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 480 | Units: 0.5 | Title: Intro Machine Learning
+Class: 6206 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 45 | Wait_cap: 0 | Wait_tot: 0
+Class: 6207 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 24 | Wait_cap: 0 | Wait_tot: 0
+Class: 8499 | Component: TST 101 | Campus: UW    U | Enrl_cap: 140 | Eenrl_tot: 0 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 482 | Units: 0.5 | Title: Comp Tech: Biol Seq Analysis
+Class: 6122 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 30 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 484 | Units: 0.5 | Title: Computational Vision
+Class: 6253 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 70 | Wait_cap: 0 | Wait_tot: 0
+Class: 8745 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 75 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 486 | Units: 0.5 | Title: Intro Artificial Intelligence
+Class: 5804 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 57 | Eenrl_tot: 37 | Wait_cap: 0 | Wait_tot: 0
+Class: 6102 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 67 | Eenrl_tot: 54 | Wait_cap: 0 | Wait_tot: 0
+Class: 6585 | Component: TST 101 | Campus: UW    U | Enrl_cap: 140 | Eenrl_tot: 91 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 487 | Units: 0.5 | Title: Intro Symbolic Computation
+Class: 5805 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 19 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 488 | Units: 0.5 | Title: Intro Computer Graphics
+Class: 5806 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 35 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 489 | Units: 0.5 | Title: Advanced Topics
+Class: 6472 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 70 | Eenrl_tot: 24 | Wait_cap: 0 | Wait_tot: 0
+Class: 6484 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 58 | Wait_cap: 0 | Wait_tot: 0
+Class: 7651 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 56 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 490 | Units: 0.5 | Title: Information Systems Management
+Class: 5803 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 49 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 492 | Units: 0.5 | Title: Social Implications of Comp
+Class: 5807 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 57 | Wait_cap: 0 | Wait_tot: 0
+Class: 6192 | Component: LEC 002 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 57 | Wait_cap: 0 | Wait_tot: 0
+Class: 8740 | Component: LEC 003 | Campus: UW    U | Enrl_cap: 60 | Eenrl_tot: 54 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 494 | Units: 0.5 | Title: Team Project 2
+Class: 6224 | Component: LEC 001 | Campus: UW    U | Enrl_cap: 20 | Eenrl_tot: 1 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 499R | Units: 0.5 | Title: Readings
+Class: 8835 | Component: RDG 001 | Campus: UW    U | Enrl_cap: 1 | Eenrl_tot: 1 | Wait_cap: 0 | Wait_tot: 0
+Class: 8973 | Component: RDG 002 | Campus: UW    U | Enrl_cap: 1 | Eenrl_tot: 1 | Wait_cap: 0 | Wait_tot: 0
+
+Subject: CS | Catalog: 499T | Units: 0.5 | Title: Honours Thesis
+Class: 9002 | Component: PRJ 001 | Campus: UW    U | Enrl_cap: 1 | Eenrl_tot: 1 | Wait_cap: 0 | Wait_tot: 0
+

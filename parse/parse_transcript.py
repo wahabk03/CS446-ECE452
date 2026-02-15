@@ -69,7 +69,7 @@ def parse_transcript(text:str):
 
 # step 1 : parse text from transcript
 
-raw = parser.from_file("SSR_TSRPT1.pdf")
+raw = parser.from_file("parse/test_file/SSR_TSRPT_anonymous.pdf")
 
 '''
 with open('parse_transcript.txt','w+') as file:
@@ -80,7 +80,7 @@ with open('parse_transcript.txt','w+') as file:
 
 parsed_data = parse_transcript(raw["content"])
 
-with open("parsed_transcript.txt","w+",encoding="utf-8") as file:
+with open("parse/example_output/parsed_transcript.txt","w+",encoding="utf-8") as file:
     file.write(f"Student: {parsed_data['Name'] or '-'}\n")
     file.write(f"SID:      {parsed_data['SID'] or '-'}\n")
     file.write(f"Program: {parsed_data['Program'] or '-'}\n")

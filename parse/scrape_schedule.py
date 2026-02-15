@@ -163,7 +163,7 @@ sess = "1261"
 # print(subjects)
 courses = get_subject_courses(level, sess, "CS")
 
-with open('scraped_schedule.txt','w+') as file:
+with open('parse/example_output/scraped_schedule.txt','w+') as file:
     for course in courses:
         file.write(f"Subject: {course['subject']} | "
                 f"Catalog: {course['catalog']} | "
