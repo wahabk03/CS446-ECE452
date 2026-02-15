@@ -1,5 +1,6 @@
 from tika import parser # pip install tika
 import re
+import json
 
 def parse_transcript(text:str):
     '''
@@ -80,18 +81,20 @@ with open('parse_transcript.txt','w+') as file:
 
 parsed_data = parse_transcript(raw["content"])
 
-with open("parse/example_output/parsed_transcript.txt","w+",encoding="utf-8") as file:
-    file.write(f"Student: {parsed_data['Name'] or '-'}\n")
-    file.write(f"SID:      {parsed_data['SID'] or '-'}\n")
-    file.write(f"Program: {parsed_data['Program'] or '-'}\n")
-    file.write('\n')
-    for course in parsed_data['CoursesTaken']:
-        # 'Term': 'Fall 2017', 'Code': 'CS 137', 'Description': 'Programming Principles', 'Attempted': '0.50', 'Earned': '0.50', 'Grade': '86'
-        file.write(
-            f"Term: {course['Term']} | "
-            f"Code: {course['Code']} | "
-            f"Description: {course['Description']} | "
-            f"Attempted: {course['Attempted']} | "
-            f"Earned: {course['Earned']} | "
-            f"Grade: {course['Grade']}\n"
-        )
+# with open("parse/example_output/parsed_transcript.txt","w+",encoding="utf-8") as file:
+#     file.write(f"Student: {parsed_data['Name'] or '-'}\n")
+#     file.write(f"SID:      {parsed_data['SID'] or '-'}\n")
+#     file.write(f"Program: {parsed_data['Program'] or '-'}\n")
+#     file.write('\n')
+#     for course in parsed_data['CoursesTaken']:
+#         # 'Term': 'Fall 2017', 'Code': 'CS 137', 'Description': 'Programming Principles', 'Attempted': '0.50', 'Earned': '0.50', 'Grade': '86'
+#         file.write(
+#             f"Term: {course['Term']} | "
+#             f"Code: {course['Code']} | "
+#             f"Description: {course['Description']} | "
+#             f"Attempted: {course['Attempted']} | "
+#             f"Earned: {course['Earned']} | "
+#             f"Grade: {course['Grade']}\n"
+#         )
+
+json_string = json.dumps(parsed_data,indent=4)
