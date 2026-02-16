@@ -145,28 +145,28 @@ with open("parse/test_file/current_schedule.txt", "r") as f:
 
 parsed_current_schedule = parse_current_schedule(current_schedule)
 
-with open("parse/example_output/parsed_current_schedule.txt", "w+", encoding="utf-8") as file:
-    for course in parsed_current_schedule:
-        file.write(
-            f"Term: {course['Term'] or '-'} | "
-            f"Code: {course['Code']} | "
-            f"Description: {course['Description'] or '-'} | "
-            f"Status: {course['Status'] or '-'} | "
-            f"Units: {course['Units'] or '-'}\n"
-        )
+# with open("parse/example_output/parsed_current_schedule.txt", "w+", encoding="utf-8") as file:
+#     for course in parsed_current_schedule:
+#         file.write(
+#             f"Term: {course['Term'] or '-'} | "
+#             f"Code: {course['Code']} | "
+#             f"Description: {course['Description'] or '-'} | "
+#             f"Status: {course['Status'] or '-'} | "
+#             f"Units: {course['Units'] or '-'}\n"
+#         )
 
-        # Show sections (LEC, TUT, etc.)
-        if course['Sections']:
-            for sec in course['Sections']:
-                file.write(
-                    f"    Class Nbr: {sec.get('ClassNbr', '-')} | "
-                    f"Section: {sec.get('Section', '-')} | "
-                    f"Component: {sec.get('Component', '-')} | "
-                    f"Days & Times: {sec.get('DaysTimes', '-')} | "
-                    f"Room: {sec.get('Room', '-')} | "
-                    f"Instructor: {sec.get('Instructor', '-')} | "
-                    f"Dates: {sec.get('Dates', '-')}\n"
-                )
+#         # Show sections (LEC, TUT, etc.)
+#         if course['Sections']:
+#             for sec in course['Sections']:
+#                 file.write(
+#                     f"    Class Nbr: {sec.get('ClassNbr', '-')} | "
+#                     f"Section: {sec.get('Section', '-')} | "
+#                     f"Component: {sec.get('Component', '-')} | "
+#                     f"Days & Times: {sec.get('DaysTimes', '-')} | "
+#                     f"Room: {sec.get('Room', '-')} | "
+#                     f"Instructor: {sec.get('Instructor', '-')} | "
+#                     f"Dates: {sec.get('Dates', '-')}\n"
+                # )
 
 json_string = json.dumps(parsed_current_schedule,indent=4)
 
