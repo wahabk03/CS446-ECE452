@@ -34,36 +34,42 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Composable
 fun MainScreen() {
+    var scheduledCourses by remember { mutableStateOf(listOf<Course>()) }
+
     Row(modifier = Modifier.fillMaxSize()) {
 
-        // Left: Course List
         CourseList(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
+                .fillMaxHeight(),
+            onCourseSelected = { course ->
+                scheduledCourses = scheduledCourses + course
+            }
         )
 
-        // Right: Timetable Area
         TimetableView(
             modifier = Modifier
                 .weight(2f)
-                .fillMaxHeight()
+                .fillMaxHeight(),
+            courses = scheduledCourses
         )
     }
 }
 
+
 @Composable
-fun CourseList(modifier: Modifier = Modifier) {
-    val courses = listOf("CS446", "ECE452", "STAT341", "MATH239", "PHYS115")
+fun CourseList(
+    modifier: Modifier = Modifier,
+    onCourseSelected: (Course) -> Unit
+) {
+    val courses = listOf(
+        Course("CS446", Section("Mon", 9, 11)),
+        Course("ECE452", Section("Tue", 10, 12)),
+        Course("STAT341", Section("Wed", 13, 15)),
+        Course("MATH239", Section("Thu", 8, 10)),
+        Course("PHYS115", Section("Fri", 14, 16))
+    )
 
     LazyColumn(
         modifier = modifier
@@ -74,10 +80,11 @@ fun CourseList(modifier: Modifier = Modifier) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .padding(vertical = 4.dp),
+                onClick = { onCourseSelected(course) }
             ) {
                 Text(
-                    text = course,
+                    text = course.code,
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -85,21 +92,35 @@ fun CourseList(modifier: Modifier = Modifier) {
     }
 }
 
+
 @Composable
-fun TimetableView(modifier: Modifier = Modifier) {
-    Box(
+fun TimetableView(
+    modifier: Modifier = Modifier,
+    courses: List<Course>
+) {
+    Column(
         modifier = modifier
             .background(Color.White)
             .padding(8.dp)
     ) {
-        Text("Timetable Area")
-    }
-}
+        Text("Timetable")
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    GraphicalTimePlannerTheme {
-        Greeting("Android")
+        Spacer(modifier = Modifier.height(16.dp))
+
+        courses.forEach { course ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFBBDEFB)
+                )
+            ) {
+                Text(
+                    text = "${course.code} - ${course.section.day} ${course.section.startHour}:00-${course.section.endHour}:00",
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
     }
 }
