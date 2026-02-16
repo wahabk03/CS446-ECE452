@@ -12,6 +12,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import ca.uwaterloo.cs446.graphicaltimeplanner.ui.theme.GraphicalTimePlannerTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,12 +27,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             GraphicalTimePlannerTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                    MainScreen()
             }
         }
     }
@@ -36,6 +39,61 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
         text = "Hello $name!",
         modifier = modifier
     )
+}
+
+@Composable
+fun MainScreen() {
+    Row(modifier = Modifier.fillMaxSize()) {
+
+        // Left: Course List
+        CourseList(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        )
+
+        // Right: Timetable Area
+        TimetableView(
+            modifier = Modifier
+                .weight(2f)
+                .fillMaxHeight()
+        )
+    }
+}
+
+@Composable
+fun CourseList(modifier: Modifier = Modifier) {
+    val courses = listOf("CS446", "ECE452", "STAT341", "MATH239", "PHYS115")
+
+    LazyColumn(
+        modifier = modifier
+            .background(Color.LightGray)
+            .padding(8.dp)
+    ) {
+        items(courses) { course ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = course,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TimetableView(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(Color.White)
+            .padding(8.dp)
+    ) {
+        Text("Timetable Area")
+    }
 }
 
 @Preview(showBackground = true)
