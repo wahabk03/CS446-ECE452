@@ -44,9 +44,17 @@ fun MainScreen() {
                 .weight(1f)
                 .fillMaxHeight(),
             onCourseSelected = { course ->
-                scheduledCourses = scheduledCourses + course
+
+                val alreadyAdded = scheduledCourses.any { it.code == course.code }
+                val conflict = isConflict(course, scheduledCourses)
+
+                if (!alreadyAdded && !conflict) {
+                    scheduledCourses = scheduledCourses + course
+                }
             }
         )
+
+
 
         TimetableView(
             modifier = Modifier
@@ -55,6 +63,24 @@ fun MainScreen() {
             courses = scheduledCourses
         )
     }
+}
+
+fun isConflict(newCourse: Course, existing: List<Course>): Boolean {
+    for (course in existing) {
+
+        if (course.section.day == newCourse.section.day) {
+
+            val startA = course.section.startHour
+            val endA = course.section.endHour
+            val startB = newCourse.section.startHour
+            val endB = newCourse.section.endHour
+
+            if (startB < endA && endB > startA) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 
