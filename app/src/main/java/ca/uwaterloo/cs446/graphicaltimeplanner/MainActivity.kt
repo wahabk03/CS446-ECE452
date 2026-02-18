@@ -16,10 +16,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,8 +65,12 @@ fun MainScreen() {
             modifier = Modifier
                 .weight(2f)
                 .fillMaxHeight(),
-            courses = scheduledCourses
+            courses = scheduledCourses,
+            onRemoveCourse = { course ->
+                scheduledCourses = scheduledCourses - course
+            }
         )
+
     }
 }
 
@@ -122,31 +131,86 @@ fun CourseList(
 @Composable
 fun TimetableView(
     modifier: Modifier = Modifier,
-    courses: List<Course>
+    courses: List<Course>,
+    onRemoveCourse: (Course) -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .background(Color.White)
-            .padding(8.dp)
-    ) {
-        Text("Timetable")
 
-        Spacer(modifier = Modifier.height(16.dp))
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+    val startHour = 8
+    val endHour = 22
+    val halfHourHeight = 40.dp
 
-        courses.forEach { course ->
-            Card(
+    val horizontalScrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
+
+    Column(modifier = modifier.fillMaxSize()) {
+
+        Row {
+
+            Spacer(modifier = Modifier.width(60.dp))
+
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFBBDEFB)
-                )
+                    .horizontalScroll(horizontalScrollState)
             ) {
-                Text(
-                    text = "${course.code} - ${course.section.day} ${course.section.startHour}:00-${course.section.endHour}:00",
-                    modifier = Modifier.padding(12.dp)
-                )
+                days.forEach { day ->
+                    Box(
+                        modifier = Modifier
+                            .width(150.dp)
+                            .padding(4.dp)
+                    ) {
+                        Text(text = day)
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxSize()
+        ) {
+
+            Column(
+                modifier = Modifier
+                    .width(60.dp)
+                    .verticalScroll(verticalScrollState)
+            ) {
+                for (hour in startHour until endHour) {
+                    Text("$hour:00", modifier = Modifier.height(halfHourHeight * 2))
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(horizontalScrollState)
+                    .verticalScroll(verticalScrollState)
+            ) {
+
+                days.forEach {
+
+                    Column(
+                        modifier = Modifier.width(150.dp)
+                    ) {
+
+                        for (hour in startHour until endHour) {
+
+                            Box(
+                                modifier = Modifier
+                                    .height(halfHourHeight)
+                                    .fillMaxWidth()
+                                    .border(0.5.dp, Color.LightGray)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .height(halfHourHeight)
+                                    .fillMaxWidth()
+                                    .border(0.5.dp, Color.LightGray)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
+
