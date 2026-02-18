@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
-
+import android.R.attr.columnWidth
+import androidx.compose.ui.unit.times
+import androidx.compose.ui.Alignment
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -179,37 +181,94 @@ fun TimetableView(
                 }
             }
 
-            Row(
+            Box(
                 modifier = Modifier
                     .horizontalScroll(horizontalScrollState)
-                    .verticalScroll(verticalScrollState)
+                    .verticalScroll(rememberScrollState())
             ) {
+                Row {
 
-                days.forEach {
+                    days.forEach {
 
-                    Column(
-                        modifier = Modifier.width(150.dp)
-                    ) {
+                        Column(
+                            modifier = Modifier.width(150.dp)
+                        ) {
 
-                        for (hour in startHour until endHour) {
+                            for (hour in startHour until endHour) {
 
-                            Box(
-                                modifier = Modifier
-                                    .height(halfHourHeight)
-                                    .fillMaxWidth()
-                                    .border(0.5.dp, Color.LightGray)
+                                Box(
+                                    modifier = Modifier
+                                        .height(halfHourHeight)
+                                        .fillMaxWidth()
+                                        .border(0.5.dp, Color.LightGray)
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .height(halfHourHeight)
+                                        .fillMaxWidth()
+                                        .border(0.5.dp, Color.LightGray)
+                                )
+                            }
+                        }
+                    }
+                }
+                // add courses
+                val columnWidth = 150.dp
+                courses.forEach { course ->
+
+                    val dayIndex = days.indexOf(course.section.day)
+
+                    if (dayIndex != -1) {
+
+                        val yOffset =
+                            ((course.section.startHour - startHour) * 2) * halfHourHeight
+
+                        val height =
+                            ((course.section.endHour - course.section.startHour) * 2) * halfHourHeight
+
+                        Box(
+                            modifier = Modifier
+                                .offset(
+                                    x = columnWidth * dayIndex,
+                                    y = yOffset
+                                )
+                                .width(columnWidth)
+                                .height(height)
+                                .background(Color(0xFF90CAF9))
+                                .border(1.dp, Color.Blue)
+                        ) {
+                            Text(
+                                text = course.code,
+                                modifier = Modifier.padding(4.dp)
                             )
+                        }
 
-                            Box(
-                                modifier = Modifier
-                                    .height(halfHourHeight)
-                                    .fillMaxWidth()
-                                    .border(0.5.dp, Color.LightGray)
-                            )
+                        Box(
+                            modifier = Modifier
+                                .offset(
+                                    x = columnWidth * dayIndex,
+                                    y = yOffset
+                                )
+                                .width(columnWidth)
+                                .height(height)
+                                .fillMaxSize(), // Makes the Box fill the available screen/parent size
+                                contentAlignment = Alignment.TopEnd // Aligns all content inside to the top right
+                        ) {
+                            TextButton(
+                                onClick = { onRemoveCourse(course) }
+                            ) {
+                                Text(
+                                    text = "X",
+                                    modifier = Modifier.padding(0.dp) // Optional: Add padding
+                                )
+                            }
                         }
                     }
                 }
             }
+
+
         }
     }
 }
