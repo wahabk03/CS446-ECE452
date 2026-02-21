@@ -10,14 +10,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun HomeScreen() {
+fun RegisterScreen() {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Text(
             // !!! Need Action
-            text = "This is Home Screen!",
+            text = "This is Register Screen!",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold
         )
