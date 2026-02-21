@@ -29,7 +29,16 @@ fun NavGraph(
         }
 
         composable("register") {
-            RegisterScreen()
+            RegisterScreen(
+                onRegisterSuccess = {
+                    navController.navigate("login") {
+                        popUpTo("register") { inclusive = true }
+                    }
+                },
+                onLoginClick = {
+                    navController.popBackStack()
+                }
+            )
         }
 
         composable("home") {
