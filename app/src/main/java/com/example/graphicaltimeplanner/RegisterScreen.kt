@@ -19,6 +19,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun RegisterScreen(
@@ -30,6 +33,9 @@ fun RegisterScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+
+    val auth = remember { FirebaseAuth.getInstance() }
+    val coroutineScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -167,7 +173,7 @@ fun RegisterScreen(
                                 return@Button
                             }
 
-                            if (trimmedPassword.length < 6) {
+if (trimmedPassword.length < 6) {
                                 errorMessage = "Password must be at least 6 characters"
                                 return@Button
                             }
@@ -180,9 +186,17 @@ fun RegisterScreen(
                             isLoading = true
                             errorMessage = null
 
-                            // TODO: Replace with actual registration logic
-                            onRegisterSuccess()
-                            isLoading = false
+                            coroutineScope.launch {
+                                try {
+                                    val result = auth.createUserWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
+                                    result.user?.sendEmailVerification()?.await()
+                                    auth.signOut()
+                                    onRegisterSuccess()
+                                } catch (e: Exception) {
+                                    errorMessage = e.localizedMessage ?: "Registration failed"
+                                }
+                                isLoading = false
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

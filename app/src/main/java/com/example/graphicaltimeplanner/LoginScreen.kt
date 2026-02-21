@@ -13,26 +13,28 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
-import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit
 ) {
-    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
+    val auth = remember { FirebaseAuth.getInstance() }
     val coroutineScope = rememberCoroutineScope()
 
     Box(
@@ -94,9 +96,10 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("Username") },
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !isLoading,
@@ -138,8 +141,11 @@ fun LoginScreen(
 
                     Button(
                         onClick = {
-                            if (username.isBlank() || password.isBlank()) {
-                                errorMessage = "Please enter username and password"
+                            val trimmedEmail = email.trim()
+                            val trimmedPassword = password.trim()
+
+                            if (trimmedEmail.isBlank() || trimmedPassword.isBlank()) {
+                                errorMessage = "Please enter email and password"
                                 return@Button
                             }
 
@@ -147,13 +153,17 @@ fun LoginScreen(
                             errorMessage = null
 
                             coroutineScope.launch {
-                                // fake short delay (remove in real app)
-                                delay(600)
-
-                                if (authenticate(username.trim(), password.trim())) {
-                                    onLoginSuccess()
-                                } else {
-                                    errorMessage = "Wrong username or password"
+                                try {
+                                    val result = auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
+                                    result.user?.reload()?.await()
+                                    if (auth.currentUser?.isEmailVerified == true) {
+                                        onLoginSuccess()
+                                    } else {
+                                        auth.signOut()
+                                        errorMessage = "Please verify your email before logging in. Check your inbox."
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = e.localizedMessage ?: "Login failed"
                                 }
                                 isLoading = false
                             }
@@ -194,7 +204,7 @@ fun LoginScreen(
                             color = Color.Gray,
                             fontSize = 14.sp
                         )
-                        TextButton(onClick = onRegisterClick ) {
+                        TextButton(onClick = onRegisterClick) {
                             Text(
                                 "Register now!",
                                 color = colorResource(R.color.uw_gold_lvl4),
@@ -206,12 +216,4 @@ fun LoginScreen(
             }
         }
     }
-}
-
-// !!! Need Action
-private fun authenticate(username: String, password: String): Boolean {
-    // Change these values to whatever you want to use for testing
-    val correctUsername = "user"
-    val correctPassword = "1234"
-    return username == correctUsername && password == correctPassword
 }
