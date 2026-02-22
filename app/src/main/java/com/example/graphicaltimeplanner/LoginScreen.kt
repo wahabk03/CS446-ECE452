@@ -155,13 +155,8 @@ fun LoginScreen(
                             coroutineScope.launch {
                                 try {
                                     val result = auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
-                                    result.user?.reload()?.await()
-                                    if (auth.currentUser?.isEmailVerified == true) {
-                                        onLoginSuccess()
-                                    } else {
-                                        auth.signOut()
-                                        errorMessage = "Please verify your email before logging in. Check your inbox."
-                                    }
+                                    // For testing purposes, we bypass email verification
+                                    onLoginSuccess()
                                 } catch (e: Exception) {
                                     errorMessage = e.localizedMessage ?: "Login failed"
                                 }

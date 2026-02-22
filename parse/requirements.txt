@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+lxml
+tika
+firebase-admin
+google-cloud-firestore
+google-auth

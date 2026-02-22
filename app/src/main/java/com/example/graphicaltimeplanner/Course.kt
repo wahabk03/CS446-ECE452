@@ -1,9 +1,9 @@
 package com.example.graphicaltimeplanner
 
 data class Section(
-    val day: String,        // Mon
-    val startHour: Int,     // 8
-    val endHour: Int        // 20
+    val day: String,
+    val startHour: Int,
+    val endHour: Int
 )
 
 data class Course(

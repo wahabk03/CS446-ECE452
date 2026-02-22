@@ -42,7 +42,7 @@ fun NavGraph(
         }
 
         composable("home") {
-            HomeScreen()
+            PlannerScreen()
         }
     }
 }

@@ -158,26 +158,27 @@ def get_subject_courses(level: str, sess: str, subject: str):
 #   else:
 #       print("Failed to fetch data:", response.status_code)
 
-level = "under"
-sess = "1261"
-# subjects = get_all_subjects("under", "1261")
-# print(subjects)
-courses = get_subject_courses(level, sess, "CS")
+if __name__ == "__main__":
+    level = "under"
+    sess = "1261"
+    # subjects = get_all_subjects("under", "1261")
+    # print(subjects)
+    courses = get_subject_courses(level, sess, "CS")
 
-# with open('parse/example_output/scraped_schedule.txt','w+') as file:
-#     for course in courses:
-#         file.write(f"Subject: {course['subject']} | "
-#                 f"Catalog: {course['catalog']} | "
-#                 f"Units: {course['units']} | "
-#                 f"Title: {course['title']}\n")
-#         for section in course['sections']:
-#             file.write(f"Class: {section['class']} | "
-#                 f"Component: {section['component']} | "
-#                 f"Campus: {section['campus']} | "
-#                 f"Enrl_cap: {section['enrl_cap']} | "
-#                 f"Eenrl_tot: {section['enrl_tot']} | "
-#                 f"Wait_cap: {section['wait_cap']} | "
-#                 f"Wait_tot: {section['wait_tot']}\n")
-#         file.write('\n')
+    # with open('parse/example_output/scraped_schedule.txt','w+') as file:
+    #     for course in courses:
+    #         file.write(f"Subject: {course['subject']} | "
+    #                 f"Catalog: {course['catalog']} | "
+    #                 f"Units: {course['units']} | "
+    #                 f"Title: {course['title']}\n")
+    #         for section in course['sections']:
+    #             file.write(f"Class: {section['class']} | "
+    #                 f"Component: {section['component']} | "
+    #                 f"Campus: {section['campus']} | "
+    #                 f"Enrl_cap: {section['enrl_cap']} | "
+    #                 f"Eenrl_tot: {section['enrl_tot']} | "
+    #                 f"Wait_cap: {section['wait_cap']} | "
+    #                 f"Wait_tot: {section['wait_tot']}\n")
+    #         file.write('\n')
 
-json_string = json.dumps(courses,indent=4)
+    json_string = json.dumps(courses,indent=4)

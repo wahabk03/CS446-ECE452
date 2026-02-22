@@ -16,3 +16,5 @@
 local.properties
 .vscode
 app/google-services.json
+parse/serviceAccountKey.json
+*__pycache__/
