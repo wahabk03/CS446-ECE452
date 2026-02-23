@@ -42,7 +42,13 @@ fun NavGraph(
         }
 
         composable("home") {
-            PlannerScreen()
+            PlannerScreen(
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
