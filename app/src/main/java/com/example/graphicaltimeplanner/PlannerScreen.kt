@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -28,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun PlannerScreen() {
@@ -43,13 +47,36 @@ fun PlannerScreen() {
             .background(colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.1f)) // Light background
             .padding(16.dp)
     ) {
-        Text(
-            text = "My Timetable",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row (
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ){
+            Text(
+                text = "My Timetable",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+            )
+
+            Button(
+                onClick = {
+                    println("Button clicked")
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colorResource(R.color.uw_gold_lvl4),
+                    contentColor = Color.Black
+                )
+            )
+            {
+                Text(
+                    text = "Import"
+                )
+
+            }
+        }
+
 
         // Timetable Section (Top 60%)
         Card(
@@ -72,7 +99,7 @@ fun PlannerScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Available Courses",
+            text = "Selected Courses",
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -95,6 +122,9 @@ fun PlannerScreen() {
 
                     if (!alreadyAdded && !conflict) {
                         scheduledCourses = scheduledCourses + course
+                    }
+                    else if (alreadyAdded) {
+                        scheduledCourses = scheduledCourses - course
                     }
                 }
             )
@@ -137,8 +167,12 @@ fun CourseList(
                     .fillMaxWidth()
                     .padding(vertical = 6.dp),
                 shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                onClick = { onCourseSelected(course) }
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                onClick = {
+                    onCourseSelected(course)
+                }
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -183,7 +217,7 @@ fun TimetableView(
     
     // We use BoxWithConstraints to calculate widths dynamically so no horizontal scroll is needed
     BoxWithConstraints(modifier = modifier.fillMaxSize().padding(8.dp)) {
-        val totalWidth = maxWidth
+        val totalWidth = this.maxWidth
         val timeColumnWidth = 50.dp
         val dayColumnWidth = (totalWidth - timeColumnWidth) / days.size
 
