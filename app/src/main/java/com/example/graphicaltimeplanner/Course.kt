@@ -31,5 +31,6 @@ data class Course(
     val code: String,   // e.g. "CS 136"
     val title: String,  // e.g. "Elementary Algorithm Design and Data Abstraction"
     val section: Section,
-    val term: String    // e.g. "1261"
+    val term: String,   // e.g. "1261"
+    val units: String   // e.g. "0.5"
 )

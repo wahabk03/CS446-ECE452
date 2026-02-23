@@ -58,6 +58,7 @@ object CourseRepository {
 
                 val code = document.getString("catalog") ?: ""
                 val title = document.getString("title") ?: ""
+                val units = document.getString("units") ?: ""
 
                 // 'sections' is an array of maps
                 val rawSections = document.get("sections") as? List<Map<String, Any>> ?: emptyList()
@@ -86,7 +87,8 @@ object CourseRepository {
                                     endTime = end,
                                     location = location
                                 ),
-                                term = term
+                                term = term,
+                                units = units
                             )
                         )
                     } else {
@@ -104,7 +106,8 @@ object CourseRepository {
                                     endTime = Time(0, 0),
                                     location = location.ifBlank { "TBA" }
                                 ),
-                                term = term
+                                term = term,
+                                units = units
                             )
                         )
                     }
@@ -135,8 +138,22 @@ object TimeParser {
         
         val (h1, m1, h2, m2) = match.destructured
         
-        val start = Time(h1.toInt(), m1.toInt())
-        val end = Time(h2.toInt(), m2.toInt())
+        var startH = h1.toInt()
+        val startM = m1.toInt()
+        var endH = h2.toInt()
+        val endM = m2.toInt()
+        
+        // Waterloo classes are between 8:30 AM and 9:50 PM.
+        // If the hour is less than 8, it must be PM (e.g., 4:00 -> 16:00).
+        if (startH < 8) startH += 12
+        if (endH < 8) endH += 12
+        
+        // If the end hour is still less than the start hour, it must be PM.
+        // (e.g., 6:30 PM to 9:20 PM -> startH=18, endH=9 -> endH becomes 21)
+        if (endH < startH) endH += 12
+        
+        val start = Time(startH, startM)
+        val end = Time(endH, endM)
         
         // Extract rest of string as days
         // The string might have dates at the end, e.g. "02:30-03:20MWF05/05-07/30"
