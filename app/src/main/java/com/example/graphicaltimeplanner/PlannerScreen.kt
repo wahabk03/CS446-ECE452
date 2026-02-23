@@ -59,6 +59,7 @@ fun PlannerScreen(
     var scheduledCourses by remember { mutableStateOf(listOf<Course>()) }
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showAddCourseDialog by remember { mutableStateOf(false) }
 
     // Use a Column layout for mobile responsiveness, or BoxWithConstraints if you really want split pane
     // Simplified to a Column since dual-pane is tricky on small screens without more setup
@@ -169,12 +170,105 @@ fun PlannerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "Selected Courses",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // Selected Courses header + Add Course button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Selected Courses",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            TextButton(
+                onClick = { showAddCourseDialog = true },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = colorResource(R.color.uw_gold_lvl4)
+                )
+            ) {
+                Text("Add Course")
+            }
+        }
+
+        // Add Course dialog (popup with all available courses)
+        if (showAddCourseDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddCourseDialog = false },
+                title = {
+                    Text("Add Course to Schedule")
+                },
+                text = {
+                    val allCourses = CourseRepository.getCourses()
+                    val scheduledCodes = scheduledCourses.map { it.code }.toSet()
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp)  // limit height to avoid huge dialog
+                    ) {
+                        items(allCourses) { course ->
+                            val isAdded = course.code in scheduledCodes
+                            val hasConflict = isConflict(course, scheduledCourses)
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when {
+                                        isAdded -> Color(0xFFE0F2F1)      // light teal = already added
+                                        hasConflict -> Color(0xFFFFEBEE)  // light red = conflict
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                ),
+                                onClick = {
+                                    if (!isAdded && !hasConflict) {
+                                        scheduledCourses = scheduledCourses + course
+                                        // Optional: close dialog after adding
+                                        // showAddCourseDialog = false
+                                    }
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(CircleShape)
+                                            .background(colorResource(R.color.uw_gold_lvl4))
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column {
+                                        Text(
+                                            text = course.code,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                        Text(
+                                            text = "${course.section.day} ${course.section.startHour}:00 - ${course.section.endHour}:00",
+                                            fontSize = 13.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showAddCourseDialog = false }) {
+                        Text("Close")
+                    }
+                },
+                dismissButton = {}
+            )
+        }
 
         // Course List Section (Bottom 40%)
         Card(
