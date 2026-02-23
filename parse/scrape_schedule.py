@@ -85,6 +85,8 @@ def get_subject_courses(level: str, sess: str, subject: str):
                                 "enrl_tot": scols[7].get_text(strip=True),
                                 "wait_cap": scols[8].get_text(strip=True),
                                 "wait_tot": scols[9].get_text(strip=True),
+                                "time_date": scols[10].get_text(strip=True),
+                                "location": scols[11].get_text(strip=True) if len(scols) > 11 else ""
                             }
                             course["sections"].append(section)
                     break

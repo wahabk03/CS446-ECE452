@@ -34,49 +34,68 @@ def initialize_firebase():
 
 def populate_database(db):
     print("Fetching all subjects...")
-    # Using the same semester code as scrape_schedule.py example: "1261" (Winter 2026)
-    # You might want to make this dynamic or passed as argument
-    sess = "1261" 
+    # Terms: 1261 (Winter 2026), 1259 (Fall 2025), 1255 (Spring 2025)
+    # Using 1261 for initial subject list
+    initial_sess = "1261"
     level = "under"
     
-    subjects = scrape_schedule.get_all_subjects(level, sess)
+    subjects = scrape_schedule.get_all_subjects(level, initial_sess)
     print(f"Found {len(subjects)} subjects.")
+
+    # List of terms to scrape
+    terms_to_scrape = ["1261", "1259", "1255"]
 
     # Create a batch handler for efficient rights
     batch = db.batch()
     batch_count = 0
     limit = 500  # Firestore batch limit is 500
 
+    # Terms to scrape: Winter 2026 (1261), Fall 2025 (1259), Spring 2025 (1255)
+    terms_to_scrape = ["1261", "1259", "1255"]
+    
+    # Iterate through all subjects
     for subject in subjects:
-        print(f"Fetching courses for subject: {subject}")
-        courses = scrape_schedule.get_subject_courses(level, sess, subject)
+        print(f"Processing Subject: {subject}")
         
-        for course in courses:
-            # Document ID structure: "1261_CS_136"
-            doc_id = f"{sess}_{course['subject']}_{course['catalog']}"
+        # Scrape all specified terms
+        for sess in terms_to_scrape:
             
-            # Prepare data
-            doc_ref = db.collection('courses').document(doc_id)
+            courses = scrape_schedule.get_subject_courses(level, sess, subject)
             
-            # Add metadata about term
-            course['term'] = sess
-            
-            batch.set(doc_ref, course)
-            batch_count += 1
+            if not courses:
+                continue
 
-            if batch_count >= limit:
-                print("Committing batch...")
-                batch.commit()
-                batch = db.batch() # Start new batch
-                batch_count = 0
-        
-        # Be nice to the server
-        time.sleep(0.5)
+            for course in courses:
+                # Document ID structure: "1261_CS_136" (Term_Subject_Catalog)
+                doc_id = f"{sess}_{course['subject']}_{course['catalog']}"
+                
+                # Add metadata about term
+                course['term'] = sess
+                doc_ref = db.collection('courses').document(doc_id)
+                
+                batch.set(doc_ref, course)
+                batch_count += 1
+
+                if batch_count >= limit:
+                    print(f"Committing batch of {limit}...")
+                    try:
+                        batch.commit()
+                    except Exception as e:
+                        print(f"Error committing batch: {e}")
+                    
+                    batch = db.batch() # Start new batch
+                    batch_count = 0
+            
+            # Tiny sleep between terms
+            # time.sleep(0.05)
 
     # Commit any remaining operations
     if batch_count > 0:
-        print("Committing final batch...")
-        batch.commit()
+        print(f"Committing final batch of {batch_count}...")
+        try:
+            batch.commit()
+        except Exception as e:
+            print(f"Error committing final batch: {e}")
 
     print("Database population complete!")
 

@@ -13,6 +13,7 @@ import com.example.graphicaltimeplanner.ui.theme.GraphicalTimePlannerTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
@@ -34,28 +35,82 @@ import androidx.compose.ui.Alignment
 @Composable
 fun PlannerScreen() {
     var scheduledCourses by remember { mutableStateOf(listOf<Course>()) }
+    var selectedTerm by remember { mutableStateOf("1261") } // 1261 = Winter 2026
+    var selectedSubject by remember { mutableStateOf("CS") }
+    var termExpanded by remember { mutableStateOf(false) }
 
-    // Use a Column layout for mobile responsiveness, or BoxWithConstraints if you really want split pane
-    // Simplified to a Column since dual-pane is tricky on small screens without more setup
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.1f)) // Light background
+            .background(colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.1f))
             .padding(16.dp)
     ) {
-        Text(
-            text = "My Timetable",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        // --- Header Section ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "My Timetable",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Clear Button
+                Button(
+                    onClick = { scheduledCourses = emptyList() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f))
+                ) {
+                    Text("Clear", color = Color.White)
+                }
 
-        // Timetable Section (Top 60%)
+                // Term Selector Dropdown
+                Box {
+                    Button(
+                        onClick = { termExpanded = !termExpanded },
+                        colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+                    ) {
+                        Text(text = when(selectedTerm) {
+                            "1261" -> "Winter 2026"
+                            "1259" -> "Fall 2025"
+                            "1255" -> "Spring 2025"
+                            else -> selectedTerm
+                        })
+                    }
+                    DropdownMenu(
+                        expanded = termExpanded,
+                        onDismissRequest = { termExpanded = false }
+                    ) {
+                        listOf(
+                            "1261" to "Winter 2026",
+                            "1259" to "Fall 2025",
+                            "1255" to "Spring 2025"
+                        ).forEach { (code, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    if (selectedTerm != code) {
+                                        selectedTerm = code
+                                        scheduledCourses = emptyList() // Clear when switching semesters
+                                    }
+                                    termExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Timetable View (Top part) ---
         Card(
             modifier = Modifier
-                .weight(0.6f)
-                .fillMaxWidth(),
+                .weight(0.55f)
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(4.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White)
@@ -69,48 +124,204 @@ fun PlannerScreen() {
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // --- Course Selection Area (Bottom part) ---
+        Column(modifier = Modifier.weight(0.45f)) {
+            
+            Text(
+                "Add Courses",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            // Subject Filter Bar
+            SubjectSelector(
+                selectedSubject = selectedSubject,
+                onSubjectSelected = { selectedSubject = it }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Available Courses",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 8.dp)
+            // Course List from Firestore
+            Card(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                CourseList(
+                    term = selectedTerm,
+                    subject = selectedSubject,
+                    modifier = Modifier.fillMaxSize(),
+                    onCourseSelected = { course ->
+                        val alreadyAdded = scheduledCourses.any { 
+                            it.code == course.code && it.section.component == course.section.component 
+                        }
+                        
+                        // Simple conflict check
+                        val conflict = isConflict(course, scheduledCourses)
+
+                        if (!alreadyAdded && !conflict) {
+                            scheduledCourses = scheduledCourses + course
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SubjectSelector(
+    selectedSubject: String,
+    onSubjectSelected: (String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredSubjects = if (searchQuery.isBlank()) {
+        CourseRepository.ALL_SUBJECTS
+    } else {
+        CourseRepository.ALL_SUBJECTS.filter {
+            it.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Column {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Search subject (e.g. CS, MATH)...") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
 
-        // Course List Section (Bottom 40%)
-        Card(
-            modifier = Modifier
-                .weight(0.4f)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(4.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            CourseList(
-                modifier = Modifier.fillMaxSize(),
-                onCourseSelected = { course ->
-                    val alreadyAdded = scheduledCourses.any { it.code == course.code }
-                    val conflict = isConflict(course, scheduledCourses)
+        Spacer(modifier = Modifier.height(6.dp))
 
-                    if (!alreadyAdded && !conflict) {
-                        scheduledCourses = scheduledCourses + course
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filteredSubjects) { subject ->
+                FilterChip(
+                    selected = (subject == selectedSubject),
+                    onClick = { onSubjectSelected(subject) },
+                    label = { Text(subject) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colorResource(R.color.uw_gold_lvl4),
+                        selectedLabelColor = Color.Black
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CourseList(
+    term: String,
+    subject: String,
+    modifier: Modifier = Modifier,
+    onCourseSelected: (Course) -> Unit
+) {
+    // Determine state
+    // We should launch a coroutine to fetch data when term/subject changes
+    var courses by remember { mutableStateOf(listOf<Course>()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(term, subject) {
+        isLoading = true
+        errorMsg = null
+        try {
+            courses = CourseRepository.getCourses(term, subject)
+        } catch (e: Exception) {
+            errorMsg = e.message ?: "Unknown error"
+            courses = emptyList()
+        }
+        isLoading = false
+    }
+
+    if (isLoading) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = colorResource(R.color.uw_gold_lvl4))
+        }
+    } else if (errorMsg != null) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(
+                text = "Error loading courses:\n$errorMsg",
+                color = Color.Red,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+    } else if (courses.isEmpty()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(
+                text = "No courses found for $subject in this term.\nTap a different subject or switch terms.",
+                color = Color.Gray,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.padding(12.dp)
+        ) {
+            items(courses) { course ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    onClick = { onCourseSelected(course) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = course.code, // e.g. "CS 136"
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = course.title,
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                maxLines = 1
+                            )
+                        }
+                        
+                        // Section Info
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = course.section.component, // e.g. "LEC 001"
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (course.section.days.isEmpty()) "TBA"
+                                       else "${course.section.days.joinToString(",")} ${course.section.startTime}-${course.section.endTime}",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
-            )
+            }
         }
     }
 }
 
 fun isConflict(newCourse: Course, existing: List<Course>): Boolean {
     for (course in existing) {
-
-        if (course.section.day == newCourse.section.day) {
-
-            val startA = course.section.startHour
-            val endA = course.section.endHour
-            val startB = newCourse.section.startHour
-            val endB = newCourse.section.endHour
+        val commonDays = course.section.days.intersect(newCourse.section.days.toSet())
+        if (commonDays.isNotEmpty()) {
+            val startA = course.section.startTime
+            val endA = course.section.endTime
+            val startB = newCourse.section.startTime
+            val endB = newCourse.section.endTime
 
             if (startB < endA && endB > startA) {
                 return true
@@ -120,54 +331,6 @@ fun isConflict(newCourse: Course, existing: List<Course>): Boolean {
     return false
 }
 
-
-@Composable
-fun CourseList(
-    modifier: Modifier = Modifier,
-    onCourseSelected: (Course) -> Unit
-) {
-    val courses = CourseRepository.getCourses()
-
-    LazyColumn(
-        modifier = modifier.padding(12.dp)
-    ) {
-        items(courses) { course ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                onClick = { onCourseSelected(course) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(colorResource(R.color.uw_gold_lvl4))
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = course.code,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                        Text(
-                            text = "${course.section.day} ${course.section.startHour}:00 - ${course.section.endHour}:00",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 
 @Composable
@@ -260,31 +423,43 @@ fun TimetableView(
 
                         // 2. Plot Courses
                         courses.forEach { course ->
-                            val dayIndex = days.indexOf(course.section.day)
-                            if (dayIndex >= 0) {
-                                val topOffset = (course.section.startHour - startHour) * hourHeight
-                                val height = (course.section.endHour - course.section.startHour) * hourHeight
-
-                                Card(
-                                    modifier = Modifier
-                                        .offset(x = (dayIndex * dayColumnWidth), y = topOffset)
-                                        .width(dayColumnWidth)
-                                        .height(height)
-                                        .padding(2.dp),
-                                    colors = CardDefaults.cardColors(containerColor = colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.9f)),
-                                    elevation = CardDefaults.cardElevation(2.dp),
-                                    onClick = { onRemoveCourse(course) }
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(4.dp),
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = course.code,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.Black
-                                        )
+                            course.section.days.forEach { day ->
+                                val dayIndex = days.indexOf(day)
+                                if (dayIndex >= 0) {
+                                    val topOffset = (course.section.startTime.toFloat() - startHour) * hourHeight
+                                    val height = (course.section.endTime.toFloat() - course.section.startTime.toFloat()) * hourHeight
+                                    
+                                    if (height > 0.dp) {
+                                        Card(
+                                            modifier = Modifier
+                                                .absoluteOffset(x = dayColumnWidth * dayIndex, y = topOffset)
+                                                .width(dayColumnWidth)
+                                                .height(height)
+                                                .padding(2.dp),
+                                            colors = CardDefaults.cardColors(containerColor = colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.9f)),
+                                            elevation = CardDefaults.cardElevation(2.dp),
+                                            onClick = { onRemoveCourse(course) }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(2.dp),
+                                                verticalArrangement = Arrangement.Top
+                                            ) {
+                                                Text(
+                                                    text = course.code, 
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.Black,
+                                                    maxLines = 1,
+                                                    lineHeight = 10.sp
+                                                )
+                                                Text(
+                                                    text = course.section.component, 
+                                                    fontSize = 8.sp,
+                                                    maxLines = 1,
+                                                    lineHeight = 8.sp
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
