@@ -38,7 +38,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -79,6 +81,32 @@ fun PlannerScreen(
     var selectedSubject by remember { mutableStateOf("CS") }
     var termExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    // Load saved schedule on startup
+    LaunchedEffect(Unit) {
+        val saved = CourseRepository.loadUserSchedule()
+        scheduledCourses = saved
+        // Restore colors
+        val colors = mutableMapOf<String, Color>()
+        val usedColors = mutableSetOf<Color>()
+        saved.forEach { course ->
+            if (!colors.containsKey(course.code)) {
+                val available = COURSE_COLORS - usedColors
+                val color = available.firstOrNull() ?: COURSE_COLORS.random()
+                colors[course.code] = color
+                usedColors.add(color)
+            }
+        }
+        courseColors = colors
+    }
+
+    // Helper to save after any schedule change
+    fun saveSchedule(courses: List<Course>) {
+        scope.launch {
+            CourseRepository.saveUserSchedule(courses)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -147,8 +175,6 @@ fun PlannerScreen(
                                     onClick = {
                                         if (selectedTerm != code) {
                                             selectedTerm = code
-                                            scheduledCourses = emptyList() // Clear when switching semesters
-                                            courseColors = emptyMap()
                                         }
                                         termExpanded = false
                                     }
@@ -171,17 +197,23 @@ fun PlannerScreen(
             ) {
                 TimetableView(
                     modifier = Modifier.fillMaxSize(),
-                    courses = scheduledCourses,
+                    courses = scheduledCourses.filter { it.term == selectedTerm },
                     courseColors = courseColors,
                     onClearAll = {
-                        scheduledCourses = emptyList()
-                        courseColors = emptyMap()
+                        val remaining = scheduledCourses.filter { it.term != selectedTerm }
+                        val removedCodes = scheduledCourses.filter { it.term == selectedTerm }.map { it.code }.toSet()
+                        val stillUsedCodes = remaining.map { it.code }.toSet()
+                        courseColors = courseColors.filterKeys { it in stillUsedCodes }
+                        scheduledCourses = remaining
+                        saveSchedule(remaining)
                     },
                     onRemoveCourse = { course ->
-                        scheduledCourses = scheduledCourses - course
-                        if (scheduledCourses.none { it.code == course.code }) {
+                        val updated = scheduledCourses - course
+                        scheduledCourses = updated
+                        if (updated.none { it.code == course.code }) {
                             courseColors = courseColors - course.code
                         }
+                        saveSchedule(updated)
                     }
                 )
             }
@@ -228,19 +260,21 @@ fun PlannerScreen(
                     onCourseSelected = { course ->
                         // Extract the category (e.g., "LEC", "TUT", "LAB") from the component string (e.g., "LEC 001")
                         val category = course.section.component.split(" ").firstOrNull() ?: ""
-                        
+
                         // Replace if same course code AND same category is already added
-                        val filtered = scheduledCourses.filter { 
+                        val filtered = scheduledCourses.filter {
                             !(it.code == course.code && (it.section.component.split(" ").firstOrNull() ?: "") == category)
                         }
-                        scheduledCourses = filtered + course
-                        
+                        val updated = filtered + course
+                        scheduledCourses = updated
+
                         if (!courseColors.containsKey(course.code)) {
                             val usedColors = courseColors.values.toSet()
                             val availableColors = COURSE_COLORS - usedColors
                             val newColor = availableColors.firstOrNull() ?: COURSE_COLORS.random()
                             courseColors = courseColors + (course.code to newColor)
                         }
+                        saveSchedule(updated)
                     }
                 )
             }

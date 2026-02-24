@@ -1,6 +1,7 @@
 package com.example.graphicaltimeplanner
 
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
@@ -120,6 +121,64 @@ object CourseRepository {
         Log.d(TAG, "Returning ${courses.size} course sections for $subject $term")
 
         return courses
+    }
+
+    private fun courseToMap(course: Course): Map<String, Any> = mapOf(
+        "code" to course.code,
+        "title" to course.title,
+        "term" to course.term,
+        "units" to course.units,
+        "classNumber" to course.section.classNumber,
+        "component" to course.section.component,
+        "days" to course.section.days,
+        "startHour" to course.section.startTime.hour,
+        "startMinute" to course.section.startTime.minute,
+        "endHour" to course.section.endTime.hour,
+        "endMinute" to course.section.endTime.minute,
+        "location" to course.section.location
+    )
+
+    private fun mapToCourse(map: Map<String, Any>): Course = Course(
+        code = map["code"] as? String ?: "",
+        title = map["title"] as? String ?: "",
+        term = map["term"] as? String ?: "",
+        units = map["units"] as? String ?: "",
+        section = Section(
+            classNumber = map["classNumber"] as? String ?: "",
+            component = map["component"] as? String ?: "",
+            days = (map["days"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            startTime = Time(
+                (map["startHour"] as? Long)?.toInt() ?: 0,
+                (map["startMinute"] as? Long)?.toInt() ?: 0
+            ),
+            endTime = Time(
+                (map["endHour"] as? Long)?.toInt() ?: 0,
+                (map["endMinute"] as? Long)?.toInt() ?: 0
+            ),
+            location = map["location"] as? String ?: ""
+        )
+    )
+
+    suspend fun saveUserSchedule(courses: List<Course>) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        Log.d(TAG, "Saving ${courses.size} courses for user $userId")
+
+        val data = mapOf("scheduledCourses" to courses.map { courseToMap(it) })
+        db.collection("users").document(userId).set(data).await()
+    }
+
+    suspend fun loadUserSchedule(): List<Course> {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
+        Log.d(TAG, "Loading schedule for user $userId")
+
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            val rawList = doc.get("scheduledCourses") as? List<Map<String, Any>> ?: emptyList()
+            rawList.map { mapToCourse(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading user schedule", e)
+            emptyList()
+        }
     }
 }
 
