@@ -42,11 +42,33 @@ fun NavGraph(
         }
 
         composable("home") {
-            PlannerScreen(
+            HomeScreen(
+                onNavigateToTimetable = {
+                    navController.navigate("timetable")
+                },
+                onNavigateToGenerate = {
+                    navController.navigate("generate")
+                },
                 onLogout = {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable("timetable") {
+            PlannerScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("generate") {
+            GenerateScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

@@ -73,7 +73,7 @@ val COURSE_COLORS = listOf(
 
 @Composable
 fun PlannerScreen(
-    onLogout: () -> Unit = {}
+    onBack: () -> Unit = {}
 ) {
     var scheduledCourses by remember { mutableStateOf(listOf<Course>()) }
     var courseColors by remember { mutableStateOf(mapOf<String, Color>()) }
@@ -140,12 +140,12 @@ fun PlannerScreen(
                 )
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Log Out Button
+                    // Back Button
                     Button(
-                        onClick = onLogout,
+                        onClick = onBack,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                     ) {
-                        Text("Log Out", color = Color.White)
+                        Text("Back", color = Color.White)
                     }
 
                     // Term Selector Dropdown
