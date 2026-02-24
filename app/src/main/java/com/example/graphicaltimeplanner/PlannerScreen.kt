@@ -142,7 +142,7 @@ fun PlannerScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Log Out Button
                     Button(
-                        onClick = { /* TODO: Implement Log Out */ },
+                        onClick = onLogout,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                     ) {
                         Text("Log Out", color = Color.White)
