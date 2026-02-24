@@ -1,18 +1,18 @@
 package com.example.graphicaltimeplanner
 
 data class Time(
-    val hour: Int, 
+    val hour: Int,
     val minute: Int
 ) : Comparable<Time> {
     override fun compareTo(other: Time): Int {
         if (this.hour != other.hour) return this.hour - other.hour
         return this.minute - other.minute
     }
-    
+
     override fun toString(): String {
         return "%02d:%02d".format(hour, minute)
     }
-    
+
     fun toFloat(): Float {
         return hour + minute / 60f
     }
