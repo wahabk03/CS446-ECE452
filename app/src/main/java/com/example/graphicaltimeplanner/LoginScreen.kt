@@ -43,6 +43,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -179,8 +181,12 @@ fun LoginScreen(
                                     val result = auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
                                     // For testing purposes, we bypass email verification
                                     onLoginSuccess()
+                                } catch (e: FirebaseAuthInvalidUserException) {
+                                    errorMessage = "No account found with this email"
+                                } catch (e: FirebaseAuthInvalidCredentialsException) {
+                                    errorMessage = "Incorrect password"
                                 } catch (e: Exception) {
-                                    errorMessage = e.localizedMessage ?: "Login failed"
+                                    errorMessage = "Login failed. Please check your connection and try again."
                                 }
                                 isLoading = false
                             }
