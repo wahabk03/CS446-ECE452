@@ -77,7 +77,7 @@ fun PlannerScreen(
 ) {
     var scheduledCourses by remember { mutableStateOf(listOf<Course>()) }
     var courseColors by remember { mutableStateOf(mapOf<String, Color>()) }
-    var selectedTerm by remember { mutableStateOf("1261") } // 1261 = Winter 2026
+    var selectedTerm by remember { mutableStateOf(CourseRepository.TERM_MAPPINGS.first().first) }
     var selectedSubject by remember { mutableStateOf("CS") }
     var termExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -154,22 +154,14 @@ fun PlannerScreen(
                             onClick = { termExpanded = !termExpanded },
                             colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
                         ) {
-                            Text(text = when(selectedTerm) {
-                                "1261" -> "Winter 2026"
-                                "1259" -> "Fall 2025"
-                                "1255" -> "Spring 2025"
-                                else -> selectedTerm
-                            })
+                            val termLabel = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
+                            Text(text = termLabel)
                         }
                         DropdownMenu(
                             expanded = termExpanded,
                             onDismissRequest = { termExpanded = false }
                         ) {
-                            listOf(
-                                "1261" to "Winter 2026",
-                                "1259" to "Fall 2025",
-                                "1255" to "Spring 2025"
-                            ).forEach { (code, label) ->
+                            CourseRepository.TERM_MAPPINGS.forEach { (code, label) ->
                                 DropdownMenuItem(
                                     text = { Text(label) },
                                     onClick = {
@@ -259,11 +251,11 @@ fun PlannerScreen(
                     modifier = Modifier.fillMaxSize(),
                     onCourseSelected = { course ->
                         // Extract the category (e.g., "LEC", "TUT", "LAB") from the component string (e.g., "LEC 001")
-                        val category = course.section.component.split(" ").firstOrNull() ?: ""
+                        val category = course.section.componentType
 
                         // Replace if same course code AND same category is already added
                         val filtered = scheduledCourses.filter {
-                            !(it.code == course.code && (it.section.component.split(" ").firstOrNull() ?: "") == category)
+                            !(it.code == course.code && it.section.componentType == category)
                         }
                         val updated = filtered + course
                         scheduledCourses = updated

@@ -25,7 +25,10 @@ data class Section(
     val startTime: Time,     // e.g. 10:00
     val endTime: Time,       // e.g. 11:20
     val location: String     // e.g. RCH 101
-)
+) {
+    val componentType: String
+        get() = component.split(" ").firstOrNull() ?: ""
+}
 
 data class Course(
     val code: String,   // e.g. "CS 136"

@@ -16,6 +16,12 @@ A graphical course scheduling and planning application for UWaterloo students.
 - [Team contract](./docs/team-contract.md)
 - [Meeting minutes](./docs/meetings/)
 
+## App Structure & Features
+- **Authentication**: Secure user login and registration.
+- **Home Screen**: The central hub for navigating the application.
+- **My Timetable**: A visual, interactive planner where users can manually search, add, and manage their courses across different semesters.
+- **Assistant**: An automated scheduling tool. Users can build a wishlist of courses, and the Assistant will use a Depth-First Search (DFS) algorithm to generate conflict-free schedule permutations. Users can customize the subset size and export their preferred generated schedule directly to their Timetable.
+
 ## Setup & Installation
 
 ### 1. Python Backend Setup (Scraping)

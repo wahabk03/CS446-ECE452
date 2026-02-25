@@ -46,8 +46,8 @@ fun NavGraph(
                 onNavigateToTimetable = {
                     navController.navigate("timetable")
                 },
-                onNavigateToGenerate = {
-                    navController.navigate("generate")
+                onNavigateToAssistant = {
+                    navController.navigate("assistant")
                 },
                 onLogout = {
                     navController.navigate("login") {
@@ -65,10 +65,15 @@ fun NavGraph(
             )
         }
 
-        composable("generate") {
+        composable("assistant") {
             GenerateScreen(
                 onBack = {
                     navController.popBackStack()
+                },
+                onNavigateToTimetable = {
+                    navController.navigate("timetable") {
+                        popUpTo("home")
+                    }
                 }
             )
         }
