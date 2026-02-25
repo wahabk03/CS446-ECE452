@@ -26,7 +26,7 @@ fun GenerateScreen(
     onBack: () -> Unit,
     onNavigateToTimetable: () -> Unit
 ) {
-    var selectedTerm by remember { mutableStateOf("1261") }
+    var selectedTerm by remember { mutableStateOf(CourseRepository.TERM_MAPPINGS.first().first) }
     var selectedSubject by remember { mutableStateOf("CS") }
     var searchQuery by remember { mutableStateOf("") }
     var termExpanded by remember { mutableStateOf(false) }
@@ -61,6 +61,13 @@ fun GenerateScreen(
             scope.launch {
                 CourseRepository.saveGenerateState(selectedTerm, wishlist, generatedSchedules)
             }
+        }
+    }
+
+    // Ensure subsetSize doesn't exceed wishlist size
+    LaunchedEffect(wishlist) {
+        if (wishlist.isNotEmpty() && subsetSize > wishlist.size) {
+            subsetSize = wishlist.size.toFloat()
         }
     }
 
@@ -136,22 +143,14 @@ fun GenerateScreen(
                             onClick = { termExpanded = !termExpanded },
                             colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
                         ) {
-                            Text(text = when(selectedTerm) {
-                                "1261" -> "Winter 2026"
-                                "1259" -> "Fall 2025"
-                                "1255" -> "Spring 2025"
-                                else -> selectedTerm
-                            }, color = Color.Black)
+                            val termLabel = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
+                            Text(text = termLabel, color = Color.Black)
                         }
                         DropdownMenu(
                             expanded = termExpanded,
                             onDismissRequest = { termExpanded = false }
                         ) {
-                            listOf(
-                                "1261" to "Winter 2026",
-                                "1259" to "Fall 2025",
-                                "1255" to "Spring 2025"
-                            ).forEach { (code, label) ->
+                            CourseRepository.TERM_MAPPINGS.forEach { (code, label) ->
                                 DropdownMenuItem(
                                     text = { Text(label) },
                                     onClick = {
@@ -498,9 +497,7 @@ fun generateTimetables(
             return
         }
         for (i in start until courseCodes.size) {
-            if (!current.contains(courseCodes[i])) {
-                getCombs(i + 1, current + listOf(courseCodes[i]))
-            }
+            getCombs(i + 1, current + listOf(courseCodes[i]))
         }
     }
     getCombs(0, emptyList())
@@ -520,7 +517,7 @@ fun generateTimetables(
                 validCombination = false
                 break
             }
-            val groupedByComp = sections.groupBy { it.section.component.split(" ").firstOrNull() ?: "" }
+            val groupedByComp = sections.groupBy { it.section.componentType }
             for ((_, compSections) in groupedByComp) {
                 if (compSections.isNotEmpty()) {
                     componentChoices.add(compSections)
@@ -543,7 +540,7 @@ fun generateTimetables(
                 // We successfully scheduled exactly one section for every required component of every course in the combination.
                 // Create a visual signature to prevent identical-looking schedules
                 val signature = currentSchedule.map { 
-                    "${it.code}-${it.section.component.split(" ").firstOrNull()}-${it.section.days.joinToString("")}-${it.section.startTime}-${it.section.endTime}" 
+                    "${it.code}-${it.section.componentType}-${it.section.days.joinToString("")}-${it.section.startTime}-${it.section.endTime}" 
                 }.sorted().joinToString("|")
                 
                 if (signature !in seenSignatures) {

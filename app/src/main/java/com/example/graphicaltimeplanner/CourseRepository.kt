@@ -32,6 +32,13 @@ object CourseRepository {
         "WS"
     )
 
+    // Term mappings
+    val TERM_MAPPINGS = listOf(
+        "1261" to "Winter 2026",
+        "1259" to "Fall 2025",
+        "1255" to "Spring 2025"
+    )
+
     /**
      * Fetch courses from Firestore for a given term and subject.
      *
