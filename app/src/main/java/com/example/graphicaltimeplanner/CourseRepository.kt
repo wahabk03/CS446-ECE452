@@ -163,8 +163,12 @@ object CourseRepository {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         Log.d(TAG, "Saving ${courses.size} courses for user $userId")
 
-        val data = mapOf("scheduledCourses" to courses.map { courseToMap(it) })
-        db.collection("users").document(userId).set(data).await()
+        try {
+            val data = mapOf("scheduledCourses" to courses.map { courseToMap(it) })
+            db.collection("users").document(userId).set(data).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving user schedule", e)
+        }
     }
 
     suspend fun loadUserSchedule(): List<Course> {
@@ -178,6 +182,54 @@ object CourseRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user schedule", e)
             emptyList()
+        }
+    }
+
+    suspend fun saveGenerateState(term: String, wishlist: Map<String, List<Course>>, generatedSchedules: List<List<Course>>) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        Log.d(TAG, "Saving assistant state for user $userId term $term. Wishlist size: ${wishlist.size}, Schedules: ${generatedSchedules.size}")
+        
+        try {
+            val wishlistData = wishlist.mapValues { (_, courses) -> courses.map { courseToMap(it) } }
+            
+            // Firestore DOES NOT support nested arrays (List of Lists).
+            // We must wrap the inner list in a Map to store it successfully.
+            val schedulesData = generatedSchedules.map { schedule -> 
+                mapOf("courses" to schedule.map { courseToMap(it) }) 
+            }
+            
+            val data = mapOf(
+                "wishlist" to wishlistData,
+                "generatedSchedules" to schedulesData
+            )
+            db.collection("users").document(userId).collection("assistant").document(term).set(data).await()
+            Log.d(TAG, "Successfully saved assistant state")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving assistant state", e)
+        }
+    }
+
+    suspend fun loadGenerateState(term: String): Pair<Map<String, List<Course>>, List<List<Course>>> {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return Pair(emptyMap(), emptyList())
+        
+        return try {
+            val doc = db.collection("users").document(userId).collection("assistant").document(term).get().await()
+            if (!doc.exists()) return Pair(emptyMap(), emptyList())
+            
+            val rawWishlist = doc.get("wishlist") as? Map<String, List<Map<String, Any>>> ?: emptyMap()
+            val wishlist = rawWishlist.mapValues { (_, courses) -> courses.map { mapToCourse(it) } }
+            
+            // Unwrap the Map back into a List of Lists
+            val rawSchedules = doc.get("generatedSchedules") as? List<Map<String, Any>> ?: emptyList()
+            val generatedSchedules = rawSchedules.map { scheduleMap -> 
+                val coursesList = scheduleMap["courses"] as? List<Map<String, Any>> ?: emptyList()
+                coursesList.map { mapToCourse(it) }
+            }
+            
+            Pair(wishlist, generatedSchedules)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading assistant state", e)
+            Pair(emptyMap(), emptyList())
         }
     }
 }

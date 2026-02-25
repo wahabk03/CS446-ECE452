@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun HomeScreen(
     onNavigateToTimetable: () -> Unit,
-    onNavigateToGenerate: () -> Unit,
+    onNavigateToAssistant: () -> Unit,
     onLogout: () -> Unit
 ) {
     Column(
@@ -60,7 +60,7 @@ fun HomeScreen(
             }
 
             Button(
-                onClick = onNavigateToGenerate,
+                onClick = onNavigateToAssistant,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp)
@@ -68,7 +68,7 @@ fun HomeScreen(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
             ) {
-                Text("Generate Timetable", fontSize = 18.sp, color = Color.Black)
+                Text("Assistant", fontSize = 18.sp, color = Color.Black)
             }
 
             Button(
