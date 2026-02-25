@@ -78,6 +78,12 @@ object CourseRepository {
                     val component = secMap["component"] as? String ?: ""
                     val classNum = secMap["class"] as? String ?: ""
 
+                    // Skip invalid sections that have no class number or component
+                    // (These are usually orphaned additional meeting times from bad scraping)
+                    if (classNum.isBlank() && component.isBlank()) {
+                        continue
+                    }
+
                     // Parse time string (e.g. "10:00-11:20TTh")
                     val timeData = TimeParser.parse(timeDateStr)
 

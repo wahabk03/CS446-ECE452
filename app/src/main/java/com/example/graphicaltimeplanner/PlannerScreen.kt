@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -308,7 +309,8 @@ fun SubjectSelector(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(filteredSubjects) { subject ->
+            items(filteredSubjects.size) { index ->
+                val subject = filteredSubjects[index]
                 FilterChip(
                     selected = (subject == selectedSubject),
                     onClick = { onSubjectSelected(subject) },
@@ -443,7 +445,7 @@ fun CourseList(
                 }
                 
                 if (isExpanded) {
-                    items(sections, key = { it.section.component + it.code }) { course ->
+                    itemsIndexed(sections, key = { index, course -> "${course.code}-$index" }) { _, course ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
