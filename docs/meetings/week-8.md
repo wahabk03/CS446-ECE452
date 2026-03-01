@@ -4,7 +4,7 @@ Feb 23 - Mar 1
 
 - [All members] Fix bugs and add features
 - [Wahab] Authenication 
-- [Daniel] UI
+- [Daniel] UI/UX improvement
 - [Antony] Preference recommendation
 - [Ariel] Real-time database
 - [Julian] Real-time database
