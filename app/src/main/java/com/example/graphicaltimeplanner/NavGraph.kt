@@ -49,6 +49,9 @@ fun NavGraph(
                 onNavigateToAssistant = {
                     navController.navigate("assistant")
                 },
+                onNavigateToAgent = {
+                    navController.navigate("agent")
+                },
                 onLogout = {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
@@ -74,6 +77,25 @@ fun NavGraph(
                     navController.navigate("timetable") {
                         popUpTo("home")
                     }
+                }
+            )
+        }
+
+        composable("agent") {
+            AgentScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+                onHistoryClick = {
+                    navController.navigate("chat_history")
+                }
+            )
+        }
+
+        composable("chat_history") {
+            ChatHistoryScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
