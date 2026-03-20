@@ -2,36 +2,15 @@
 package com.example.graphicaltimeplanner
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +19,8 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
@@ -53,189 +34,240 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("you@example.com") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     val auth = remember { FirebaseAuth.getInstance() }
     val coroutineScope = rememberCoroutineScope()
 
-    Box(
+    val primaryYellow = colorResource(R.color.uw_gold_lvl4)  // #FFEAAB00
+    val lightBackground = Color(0xFFFDFDFD)
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.75f))
-            .padding(horizontal = 32.dp)
+            .background(lightBackground)
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Spacer(modifier = Modifier.height(48.dp))
+
+        // App icon in yellow circle
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(primaryYellow),
+            contentAlignment = Alignment.Center
         ) {
-            // Circle with Time Schedule icon
-            Box(
-                modifier = Modifier
-                    .size(140.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.25f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DateRange,
-                    contentDescription = "Schedule icon",
-                    tint = Color.White,
-                    modifier = Modifier.size(96.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Text(
-                text = "Welcome",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+            Icon(
+                imageVector = Icons.Default.DateRange,
+                contentDescription = "Timetable icon",
+                tint = Color.White,
+                modifier = Modifier.size(56.dp)
             )
+        }
 
-            Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "Login to your account",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.85f)
+        Text(
+            text = "My Timetable",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+
+        Text(
+            text = "Plan your perfect schedule",
+            fontSize = 16.sp,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(56.dp))
+
+        Text(
+            text = "Welcome",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Sign in to access your timetable",
+            fontSize = 16.sp,
+            color = Color(0xFF666666)
+        )
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // Email
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email") },
+            placeholder = { Text("you@example.com") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isLoading,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = primaryYellow,
+                focusedLabelColor = primaryYellow,
+                cursorColor = primaryYellow
             )
+        )
 
-            Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(6.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Email") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !isLoading,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colorResource(R.color.uw_gold_lvl4),
-                            focusedLabelColor = colorResource(R.color.uw_gold_lvl4),
-                            cursorColor = colorResource(R.color.uw_gold_lvl4)
-                        )
+        // Password
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            placeholder = { Text("Enter your password") },
+            trailingIcon = {
+                TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Text(
+                        if (passwordVisible) "Hide" else "Show",
+                        color = primaryYellow,
+                        fontSize = 14.sp
                     )
+                }
+            },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isLoading,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = primaryYellow,
+                focusedLabelColor = primaryYellow,
+                cursorColor = primaryYellow
+            )
+        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = errorMessage!!,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 14.sp
+            )
+        }
 
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !isLoading,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colorResource(R.color.uw_gold_lvl4),
-                            focusedLabelColor = colorResource(R.color.uw_gold_lvl4),
-                            cursorColor = colorResource(R.color.uw_gold_lvl4)
-                        )
-                    )
+        Spacer(modifier = Modifier.height(40.dp))
 
-                    if (errorMessage != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMessage!!,
-                            color = Color.Red,
-                            fontSize = 14.sp
-                        )
-                    }
+        // Sign In button
+        Button(
+            onClick = {
+                val trimmedEmail = email.trim()
+                val trimmedPassword = password.trim()
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                if (trimmedEmail.isBlank() || trimmedPassword.isBlank()) {
+                    errorMessage = "Please enter email and password"
+                    return@Button
+                }
 
-                    Button(
-                        onClick = {
-                            val trimmedEmail = email.trim()
-                            val trimmedPassword = password.trim()
+                isLoading = true
+                errorMessage = null
 
-                            if (trimmedEmail.isBlank() || trimmedPassword.isBlank()) {
-                                errorMessage = "Please enter email and password"
-                                return@Button
-                            }
-
-                            isLoading = true
-                            errorMessage = null
-
-                            coroutineScope.launch {
-                                try {
-                                    val result = auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
-                                    // For testing purposes, we bypass email verification
-                                    onLoginSuccess()
-                                } catch (e: FirebaseAuthInvalidUserException) {
-                                    errorMessage = "No account found with this email"
-                                } catch (e: FirebaseAuthInvalidCredentialsException) {
-                                    errorMessage = "Incorrect password"
-                                } catch (e: Exception) {
-                                    errorMessage = "Login failed. Please check your connection and try again."
-                                }
-                                isLoading = false
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colorResource(R.color.uw_gold_lvl4),
-                            contentColor = Color.Black
-                        ),
-                        enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.Black,
-                                strokeWidth = 3.dp
-                            )
-                        } else {
-                            Text(
-                                "LOGIN",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Column(
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "Not registered / don't have an account? ",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                        TextButton(onClick = onRegisterClick) {
-                            Text(
-                                "Register now!",
-                                color = colorResource(R.color.uw_gold_lvl4),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                coroutineScope.launch {
+                    try {
+                        auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
+                        onLoginSuccess()
+                    } catch (_: FirebaseAuthInvalidUserException) {
+                        errorMessage = "No account found with this email"
+                    } catch (_: FirebaseAuthInvalidCredentialsException) {
+                        errorMessage = "Incorrect password"
+                    } catch (_: Exception) {
+                        errorMessage = "Login failed. Please try again."
+                    } finally {
+                        isLoading = false
                     }
                 }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = primaryYellow,
+                contentColor = Color.Black
+            ),
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color.Black,
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Text(
+                    "Sign In",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Don't have an account? ",
+                color = Color(0xFF666666),
+                fontSize = 15.sp
+            )
+            TextButton(onClick = onRegisterClick) {
+                Text(
+                    "Sign up",
+                    color = primaryYellow,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Demo card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+                .clickable { /* optional demo action */ },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9E6)),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Demo Account",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Create a new account or register to get started!",
+                    fontSize = 14.sp,
+                    color = Color(0xFF555555),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

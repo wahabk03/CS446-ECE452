@@ -49,6 +49,12 @@ fun NavGraph(
                 onNavigateToAssistant = {
                     navController.navigate("assistant")
                 },
+                onNavigateToCourses = {
+                    navController.navigate("courses")
+                },
+                onNavigateToChatbot = {
+                    navController.navigate("chatbot")
+                },
                 onLogout = {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
@@ -74,6 +80,49 @@ fun NavGraph(
                     navController.navigate("timetable") {
                         popUpTo("home")
                     }
+                }
+            )
+        }
+
+        composable("courses") {
+            CourseScreen(
+                // Removed onAddCourse – CourseScreen now adds directly to AppState
+                onViewProfile = {
+                    // TODO: Navigate to profile if needed
+                },
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onBackToHome = {
+                    navController.navigate("home") {
+                        popUpTo("courses") { inclusive = true }
+                    }
+                },
+                onNavigateToChatbot = {
+                    navController.navigate("chatbot")
+                }
+            )
+        }
+
+        composable("chatbot") {
+            ChatbotScreen(
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onViewProfile = {
+                    // TODO: Navigate to profile if needed
+                },
+                onNavigateToHome = {
+                    navController.navigate("home") {
+                        popUpTo("chatbot") { inclusive = true }
+                    }
+                },
+                onNavigateToCourses = {
+                    navController.navigate("courses")
                 }
             )
         }
