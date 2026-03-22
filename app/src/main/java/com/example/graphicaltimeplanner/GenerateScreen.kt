@@ -1,5 +1,9 @@
 package com.example.graphicaltimeplanner
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,7 +47,10 @@ fun GenerateScreen(
     var isGenerating by remember { mutableStateOf(false) }
     var showNoResultsDialog by remember { mutableStateOf(false) }
     var showOverwriteDialog by remember { mutableStateOf(false) }
+    var showEmailAdvisorDialog by remember { mutableStateOf(false) }
+    var savedScheduleForEmail by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Load saved wishlist and schedules when term changes
     LaunchedEffect(selectedTerm) {
@@ -261,7 +269,8 @@ fun GenerateScreen(
                                     } else {
                                         val otherTermsSchedule = existingSchedule.filter { it.term != selectedTerm }
                                         CourseRepository.saveUserSchedule(otherTermsSchedule + currentSchedule)
-                                        onNavigateToTimetable()
+                                        savedScheduleForEmail = currentSchedule
+                                        showEmailAdvisorDialog = true
                                     }
                                 }
                             },
@@ -457,8 +466,10 @@ fun GenerateScreen(
                         scope.launch {
                             val existingSchedule = CourseRepository.loadUserSchedule()
                             val otherTermsSchedule = existingSchedule.filter { it.term != selectedTerm }
-                            CourseRepository.saveUserSchedule(otherTermsSchedule + generatedSchedules[currentScheduleIndex])
-                            onNavigateToTimetable()
+                            val currentSchedule = generatedSchedules[currentScheduleIndex]
+                            CourseRepository.saveUserSchedule(otherTermsSchedule + currentSchedule)
+                            savedScheduleForEmail = currentSchedule
+                            showEmailAdvisorDialog = true
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
@@ -476,6 +487,97 @@ fun GenerateScreen(
             }
         )
     }
+
+    // Email advisor dialog
+    if (showEmailAdvisorDialog) {
+        LaunchedEffect(Unit) {
+            CourseRepository.getAdvisors() // Ensure advisors are cached
+        }
+
+        val termName = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
+
+        AlertDialog(
+            onDismissRequest = {
+                showEmailAdvisorDialog = false
+                onNavigateToTimetable()
+            },
+            title = { Text("Notify Academic Advisor?") },
+            text = {
+                Text("Your timetable has been saved. Would you like to email your academic advisor about your new schedule?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showEmailAdvisorDialog = false
+                        scope.launch {
+                            val (programSlug, faculty, yearLevel) = CourseRepository.getUserProfile()
+                            if (programSlug != null && faculty != null) {
+                                val isFirstYear = (yearLevel ?: 1) <= 1
+                                val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
+                                if (advisor != null) {
+                                    val body = buildScheduleEmailBody(savedScheduleForEmail, termName)
+                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = Uri.parse("mailto:")
+                                        putExtra(Intent.EXTRA_EMAIL, arrayOf(advisor.email))
+                                        putExtra(Intent.EXTRA_SUBJECT, "Timetable Update - $termName")
+                                        putExtra(Intent.EXTRA_TEXT, body)
+                                    }
+                                    try {
+                                        context.startActivity(intent)
+                                    } catch (e: ActivityNotFoundException) {
+                                        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "No advisor on file for your program", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                Toast.makeText(context, "Set your program in Profile first", Toast.LENGTH_SHORT).show()
+                            }
+                            onNavigateToTimetable()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+                ) {
+                    Text("Send Email", color = Color.Black)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        showEmailAdvisorDialog = false
+                        onNavigateToTimetable()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) {
+                    Text("Skip")
+                }
+            }
+        )
+    }
+}
+
+private fun buildScheduleEmailBody(courses: List<Course>, termName: String): String {
+    val sb = StringBuilder()
+    sb.appendLine("Hi,")
+    sb.appendLine()
+    sb.appendLine("I have updated my timetable for $termName. Here is my schedule:")
+    sb.appendLine()
+
+    val grouped = courses.groupBy { it.code }
+    for ((code, sections) in grouped.toSortedMap()) {
+        val title = sections.first().title
+        sb.appendLine("$code - $title")
+        for (course in sections) {
+            val days = course.section.days.joinToString(", ")
+            val time = if (course.section.startTime.hour == 0 && course.section.endTime.hour == 0) "TBA"
+                       else "${course.section.startTime} - ${course.section.endTime}"
+            sb.appendLine("  ${course.section.component} | $days $time | ${course.section.location}")
+        }
+        sb.appendLine()
+    }
+
+    sb.appendLine("Thank you.")
+    return sb.toString()
 }
 
 fun generateTimetables(

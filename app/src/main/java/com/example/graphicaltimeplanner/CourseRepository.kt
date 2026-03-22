@@ -224,25 +224,136 @@ object CourseRepository {
 
     suspend fun loadGenerateState(term: String): Pair<Map<String, List<Course>>, List<List<Course>>> {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return Pair(emptyMap(), emptyList())
-        
+
         return try {
             val doc = db.collection("users").document(userId).collection("assistant").document(term).get().await()
             if (!doc.exists()) return Pair(emptyMap(), emptyList())
-            
+
             val rawWishlist = doc.get("wishlist") as? Map<String, List<Map<String, Any>>> ?: emptyMap()
             val wishlist = rawWishlist.mapValues { (_, courses) -> courses.map { mapToCourse(it) } }
-            
+
             // Unwrap the Map back into a List of Lists
             val rawSchedules = doc.get("generatedSchedules") as? List<Map<String, Any>> ?: emptyList()
-            val generatedSchedules = rawSchedules.map { scheduleMap -> 
+            val generatedSchedules = rawSchedules.map { scheduleMap ->
                 val coursesList = scheduleMap["courses"] as? List<Map<String, Any>> ?: emptyList()
                 coursesList.map { mapToCourse(it) }
             }
-            
+
             Pair(wishlist, generatedSchedules)
         } catch (e: Exception) {
             Log.e(TAG, "Error loading assistant state", e)
             Pair(emptyMap(), emptyList())
+        }
+    }
+
+    private var programsCache: List<Program>? = null
+    private var advisorsCache: List<Advisor>? = null
+
+    suspend fun getPrograms(): List<Program> {
+        programsCache?.let { return it }
+
+        return try {
+            val snapshot = db.collection("programs").get().await()
+            val programs = snapshot.documents.map { doc ->
+                Program(
+                    slug = doc.id,
+                    name = doc.getString("name") ?: "",
+                    faculty = doc.getString("faculty") ?: "",
+                    degreeType = doc.getString("degreeType") ?: ""
+                )
+            }.sortedBy { it.name }
+            programsCache = programs
+            Log.d(TAG, "Loaded ${programs.size} programs")
+            programs
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading programs", e)
+            emptyList()
+        }
+    }
+
+    suspend fun getAdvisors(): List<Advisor> {
+        advisorsCache?.let { return it }
+
+        return try {
+            val snapshot = db.collection("advisors").get().await()
+            val advisors = snapshot.documents.map { doc ->
+                Advisor(
+                    programSlug = doc.getString("programSlug") ?: "",
+                    email = doc.getString("email") ?: "",
+                    name = doc.getString("name") ?: "",
+                    yearLevel = doc.getString("yearLevel") ?: "all",
+                    isFallback = doc.getBoolean("isFallback") ?: false,
+                    faculty = doc.getString("faculty") ?: ""
+                )
+            }
+            advisorsCache = advisors
+            Log.d(TAG, "Loaded ${advisors.size} advisors")
+            advisors
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading advisors", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Find the correct advisor for a program based on year level.
+     * Priority: program-specific match > faculty first-year office > faculty fallback
+     */
+    fun getAdvisorForProgram(programSlug: String, isFirstYear: Boolean, faculty: String): Advisor? {
+        val advisors = advisorsCache ?: return null
+        val yearKey = if (isFirstYear) "first-year" else "upper-year"
+
+        // 1. Exact program match for this year level
+        val exactMatch = advisors.find {
+            it.programSlug == programSlug && (it.yearLevel == yearKey || it.yearLevel == "all")
+        }
+        if (exactMatch != null) return exactMatch
+
+        // 2. Faculty-level first-year office
+        if (isFirstYear) {
+            val facultySlug = faculty.lowercase()
+            val facultyFirstYear = advisors.find {
+                it.programSlug == "$facultySlug-first-year" && it.yearLevel == "first-year"
+            }
+            if (facultyFirstYear != null) return facultyFirstYear
+        }
+
+        // 3. Faculty fallback
+        val fallback = advisors.find {
+            it.isFallback && it.faculty.equals(faculty, ignoreCase = true)
+        }
+        return fallback
+    }
+
+    suspend fun getUserProfile(): Triple<String?, String?, Int?> {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return Triple(null, null, null)
+
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            val program = doc.getString("program")
+            val faculty = doc.getString("faculty")
+            val yearLevel = (doc.getLong("yearLevel"))?.toInt()
+            Triple(program, faculty, yearLevel)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading user profile", e)
+            Triple(null, null, null)
+        }
+    }
+
+    suspend fun saveUserProfile(programSlug: String, faculty: String, yearLevel: Int) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        try {
+            db.collection("users").document(userId).update(
+                mapOf(
+                    "program" to programSlug,
+                    "faculty" to faculty,
+                    "yearLevel" to yearLevel
+                )
+            ).await()
+            Log.d(TAG, "Saved user profile: program=$programSlug, yearLevel=$yearLevel")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving user profile", e)
         }
     }
 }

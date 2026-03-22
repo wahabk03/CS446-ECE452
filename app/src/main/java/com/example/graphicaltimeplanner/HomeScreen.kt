@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 fun HomeScreen(
     onNavigateToTimetable: () -> Unit,
     onNavigateToAssistant: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
     Column(
@@ -69,6 +70,18 @@ fun HomeScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
             ) {
                 Text("Assistant", fontSize = 18.sp, color = Color.Black)
+            }
+
+            Button(
+                onClick = onNavigateToProfile,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .padding(bottom = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+            ) {
+                Text("Profile", fontSize = 18.sp, color = Color.Black)
             }
 
             Button(

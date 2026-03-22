@@ -49,10 +49,21 @@ fun NavGraph(
                 onNavigateToAssistant = {
                     navController.navigate("assistant")
                 },
+                onNavigateToProfile = {
+                    navController.navigate("profile")
+                },
                 onLogout = {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable("profile") {
+            ProfileScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
