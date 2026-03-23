@@ -11,4 +11,22 @@
     <color name="uw_gold_lvl2">#FFFAE100</color>
     <color name="uw_gold_lvl3">#FFFED34C</color>
     <color name="uw_gold_lvl4">#FFEAAB00</color>
+
+    <!-- Course color palette (matches your original COURSE_COLORS list) -->
+    <color name="course_color_1">#FFFFD54F</color>   <!-- Yellow -->
+    <color name="course_color_2">#FF81C784</color>   <!-- Green -->
+    <color name="course_color_3">#FF64B5F6</color>   <!-- Blue -->
+    <color name="course_color_4">#FFE57373</color>   <!-- Red -->
+    <color name="course_color_5">#FFBA68C8</color>   <!-- Purple -->
+    <color name="course_color_6">#FFFFB74D</color>   <!-- Orange -->
+    <color name="course_color_7">#FF4DB6AC</color>   <!-- Teal -->
+    <color name="course_color_8">#FFA1887F</color>   <!-- Brown -->
+    <color name="course_color_9">#FFEF9A9A</color>   <!-- Light Red -->
+    <color name="course_color_10">#FFA5D6A7</color>  <!-- Light Green -->
+    <color name="course_color_11">#FF90CAF9</color>  <!-- Light Blue -->
+    <color name="course_color_12">#FFFFE082</color>  <!-- Light Yellow -->
+    <color name="course_color_13">#FFCE93D8</color>  <!-- Light Purple -->
+    <color name="course_color_14">#FFFFCC80</color>  <!-- Light Orange -->
+    <color name="course_color_15">#FF80CBC4</color>  <!-- Light Teal -->
+    <color name="course_color_16">#FFBCAAA4</color>  <!-- Light Brown -->
 </resources>
