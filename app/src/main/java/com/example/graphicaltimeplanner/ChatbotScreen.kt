@@ -30,11 +30,16 @@ fun ChatbotScreen(
     onLogout: () -> Unit = {},
     onViewProfile: () -> Unit = {},
     onNavigateToHome: () -> Unit = {},
-    onNavigateToCourses: () -> Unit = {}
+    onNavigateToCourses: () -> Unit = {},
+    onNavigateToAi: () -> Unit = {},
+    onNavigateToAdvisor: () -> Unit = {}
 ) {
-    val primaryYellow = colorResource(R.color.uw_gold_lvl4)
+    val primaryYellow = Color(0xFFFFD700)
     val lightYellow = primaryYellow.copy(alpha = 0.25f)
     val lightBackground = Color(0xFFFDFDFD)
+
+    val displayName by AppState.displayName
+    val nameInitial = displayName.firstOrNull()?.uppercaseChar()?.toString()
 
     val messages = remember {
         listOf(
@@ -55,11 +60,10 @@ fun ChatbotScreen(
             BottomNavBar(
                 selectedItem = BottomNavItem.CHATBOT,
                 onCoursesClick = onNavigateToCourses,
-                onAiClick = { /* TODO */ },
+                onAiClick = onNavigateToAi,
                 onScheduleClick = onNavigateToHome,
-                onChatbotClick = { /* already here */ },
-                onAdvisorClick = { /* TODO */ },
-                showImportExport = false
+                onChatbotClick = {},
+                onAdvisorClick = onNavigateToAdvisor
             )
         }
     ) { innerPadding ->
@@ -76,7 +80,13 @@ fun ChatbotScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onViewProfile() }
+                        .padding(8.dp)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -84,34 +94,22 @@ fun ChatbotScreen(
                             .background(primaryYellow),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "D",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        if (nameInitial != null) {
+                            Text(nameInitial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        } else {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        }
                     }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(
-                            text = "Daniel",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "View Profile",
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.clickable { onViewProfile() }
-                        )
+                        Text(displayName.ifBlank { "User" }, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        Text("View Profile", fontSize = 13.sp, color = Color.Gray)
                     }
                 }
 
                 TextButton(onClick = onLogout) {
                     Text(
-                        text = "→ Logout",
+                        text = "Logout",
                         color = Color.Gray,
                         fontSize = 15.sp
                     )

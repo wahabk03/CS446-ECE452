@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -36,10 +37,15 @@ fun CourseScreen(
     onViewProfile: () -> Unit = {},
     onLogout: () -> Unit = {},
     onBackToHome: () -> Unit = {},
-    onNavigateToChatbot: () -> Unit = {}
+    onNavigateToChatbot: () -> Unit = {},
+    onNavigateToAi: () -> Unit = {},
+    onNavigateToAdvisor: () -> Unit = {}
 ) {
     val primaryYellow = Color(0xFFFFD700)
     val lightBackground = Color(0xFFFDFDFD)
+
+    val displayName by AppState.displayName
+    val nameInitial = displayName.firstOrNull()?.uppercaseChar()?.toString()
 
     var courses by remember { mutableStateOf(listOf<Course>()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -98,12 +104,11 @@ fun CourseScreen(
         bottomBar = {
             BottomNavBar(
                 selectedItem = BottomNavItem.COURSES,
-                onCoursesClick = { /* already here */ },
-                onAiClick = { /* TODO */ },
+                onCoursesClick = {},
+                onAiClick = onNavigateToAi,
                 onScheduleClick = onBackToHome,
                 onChatbotClick = onNavigateToChatbot,
-                onAdvisorClick = { /* TODO */ },
-                showImportExport = false
+                onAdvisorClick = onNavigateToAdvisor
             )
         }
     ) { innerPadding ->
@@ -121,7 +126,13 @@ fun CourseScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onViewProfile() }
+                        .padding(8.dp)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -129,34 +140,22 @@ fun CourseScreen(
                             .background(primaryYellow),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "D",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        if (nameInitial != null) {
+                            Text(nameInitial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        } else {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        }
                     }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(
-                            text = "Daniel",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "View Profile",
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.clickable { onViewProfile() }
-                        )
+                        Text(displayName.ifBlank { "User" }, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        Text("View Profile", fontSize = 13.sp, color = Color.Gray)
                     }
                 }
 
                 TextButton(onClick = onLogout) {
                     Text(
-                        text = "→ Logout",
+                        text = "Logout",
                         color = Color.Gray,
                         fontSize = 15.sp
                     )
