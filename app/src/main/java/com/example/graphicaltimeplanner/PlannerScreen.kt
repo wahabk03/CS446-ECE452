@@ -27,6 +27,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -48,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -84,7 +90,9 @@ fun PlannerScreen(
     var selectedSubject by remember { mutableStateOf("CS") }
     var termExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showEmailAdvisorDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // Load saved schedule on startup
     LaunchedEffect(Unit) {
@@ -177,6 +185,19 @@ fun PlannerScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // Notify Advisor button
+            if (scheduledCourses.any { it.term == selectedTerm }) {
+                Button(
+                    onClick = { showEmailAdvisorDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+                ) {
+                    Text("Notify Advisor", color = Color.Black, fontSize = 14.sp)
                 }
             }
 
@@ -275,7 +296,87 @@ fun PlannerScreen(
             }
         }
     }
+
+    // Email advisor dialog
+    if (showEmailAdvisorDialog) {
+        val termName = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
+        val currentTermCourses = scheduledCourses.filter { it.term == selectedTerm }
+
+        AlertDialog(
+            onDismissRequest = { showEmailAdvisorDialog = false },
+            title = { Text("Notify Academic Advisor?") },
+            text = { Text("Would you like to email your academic advisor about your $termName timetable?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showEmailAdvisorDialog = false
+                        scope.launch {
+                            CourseRepository.getAdvisors()
+                            val (programSlug, faculty, yearLevel) = CourseRepository.getUserProfile()
+                            if (programSlug != null && faculty != null) {
+                                val isFirstYear = (yearLevel ?: 1) <= 1
+                                val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
+                                if (advisor != null) {
+                                    val body = buildPlannerEmailBody(currentTermCourses, termName)
+                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = Uri.parse("mailto:")
+                                        putExtra(Intent.EXTRA_EMAIL, arrayOf(advisor.email))
+                                        putExtra(Intent.EXTRA_SUBJECT, "Timetable Update - $termName")
+                                        putExtra(Intent.EXTRA_TEXT, body)
+                                    }
+                                    try {
+                                        context.startActivity(intent)
+                                    } catch (e: ActivityNotFoundException) {
+                                        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "No advisor on file for your program", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                Toast.makeText(context, "Set your program in Profile first", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+                ) {
+                    Text("Send Email", color = Color.Black)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showEmailAdvisorDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
+}
+
+private fun buildPlannerEmailBody(courses: List<Course>, termName: String): String {
+    val sb = StringBuilder()
+    sb.appendLine("Hi,")
+    sb.appendLine()
+    sb.appendLine("I have updated my timetable for $termName. Here is my schedule:")
+    sb.appendLine()
+
+    val grouped = courses.groupBy { it.code }
+    for ((code, sections) in grouped.toSortedMap()) {
+        val title = sections.first().title
+        sb.appendLine("$code - $title")
+        for (course in sections) {
+            val days = course.section.days.joinToString(", ")
+            val time = if (course.section.startTime.hour == 0 && course.section.endTime.hour == 0) "TBA"
+                       else "${course.section.startTime} - ${course.section.endTime}"
+            sb.appendLine("  ${course.section.component} | $days $time | ${course.section.location}")
+        }
+        sb.appendLine()
+    }
+
+    sb.appendLine("Thank you.")
+    return sb.toString()
 }
 
 @Composable
