@@ -37,19 +37,3 @@ data class Course(
     val term: String,   // e.g. "1261"
     val units: String   // e.g. "0.5"
 )
-
-data class Program(
-    val slug: String,
-    val name: String,
-    val faculty: String,
-    val degreeType: String
-)
-
-data class Advisor(
-    val programSlug: String,
-    val email: String,
-    val name: String,
-    val yearLevel: String,
-    val isFallback: Boolean = false,
-    val faculty: String = ""
-)

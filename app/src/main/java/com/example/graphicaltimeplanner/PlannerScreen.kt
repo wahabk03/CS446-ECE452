@@ -1,6 +1,7 @@
 package com.example.graphicaltimeplanner
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,11 +27,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,9 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
@@ -88,9 +84,7 @@ fun PlannerScreen(
     var selectedSubject by remember { mutableStateOf("CS") }
     var termExpanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var showEmailAdvisorDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     // Load saved schedule on startup
     LaunchedEffect(Unit) {
@@ -147,7 +141,7 @@ fun PlannerScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
-                
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Back Button
                     Button(
@@ -186,19 +180,6 @@ fun PlannerScreen(
                 }
             }
 
-            // Notify Advisor button
-            if (scheduledCourses.any { it.term == selectedTerm }) {
-                Button(
-                    onClick = { showEmailAdvisorDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
-                ) {
-                    Text("Notify Advisor", color = Color.Black, fontSize = 14.sp)
-                }
-            }
-
             // --- Timetable View (Top part) ---
             Card(
                 modifier = Modifier
@@ -233,148 +214,68 @@ fun PlannerScreen(
             }
 
             // --- Course Selection Area (Bottom part) ---
-        Column(modifier = Modifier.weight(0.45f)) {
-            
-            Text(
-                "Add Courses",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            // Subject Filter Bar
-            SubjectSelector(
-                searchQuery = searchQuery,
-                onSearchQueryChange = { 
-                    searchQuery = it 
-                    // Auto-select subject if the query starts with a valid subject
-                    val letters = it.takeWhile { char -> char.isLetter() }.uppercase()
-                    if (CourseRepository.ALL_SUBJECTS.contains(letters)) {
-                        selectedSubject = letters
-                    }
-                },
-                selectedSubject = selectedSubject,
-                onSubjectSelected = { selectedSubject = it }
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.weight(0.45f)) {
 
-            // Course List from Firestore
-            Card(
-                modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp),
-                elevation = CardDefaults.cardElevation(4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                CourseList(
-                    term = selectedTerm,
-                    subject = selectedSubject,
-                    searchQuery = searchQuery,
-                    modifier = Modifier.fillMaxSize(),
-                    onCourseSelected = { course ->
-                        // Extract the category (e.g., "LEC", "TUT", "LAB") from the component string (e.g., "LEC 001")
-                        val category = course.section.componentType
-
-                        // Replace if same course code AND same category is already added
-                        val filtered = scheduledCourses.filter {
-                            !(it.code == course.code && it.section.componentType == category)
-                        }
-                        val updated = filtered + course
-                        scheduledCourses = updated
-
-                        if (!courseColors.containsKey(course.code)) {
-                            val usedColors = courseColors.values.toSet()
-                            val availableColors = COURSE_COLORS - usedColors
-                            val newColor = availableColors.firstOrNull() ?: COURSE_COLORS.random()
-                            courseColors = courseColors + (course.code to newColor)
-                        }
-                        saveSchedule(updated)
-                    }
+                Text(
+                    "Add Courses",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-            }
-        }
-    }
 
-    // Email advisor dialog
-    if (showEmailAdvisorDialog) {
-        val termName = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
-        val currentTermCourses = scheduledCourses.filter { it.term == selectedTerm }
-
-        AlertDialog(
-            onDismissRequest = { showEmailAdvisorDialog = false },
-            title = { Text("Notify Academic Advisor?") },
-            text = { Text("Would you like to email your academic advisor about your $termName timetable?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showEmailAdvisorDialog = false
-                        scope.launch {
-                            CourseRepository.getAdvisors()
-                            val (programSlug, faculty, yearLevel) = CourseRepository.getUserProfile()
-                            if (programSlug != null && faculty != null) {
-                                val isFirstYear = (yearLevel ?: 1) <= 1
-                                val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
-                                if (advisor != null) {
-                                    val body = buildPlannerEmailBody(currentTermCourses, termName)
-                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                        data = Uri.parse("mailto:")
-                                        putExtra(Intent.EXTRA_EMAIL, arrayOf(advisor.email))
-                                        putExtra(Intent.EXTRA_SUBJECT, "Timetable Update - $termName")
-                                        putExtra(Intent.EXTRA_TEXT, body)
-                                    }
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (e: ActivityNotFoundException) {
-                                        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
-                                    }
-                                } else {
-                                    Toast.makeText(context, "No advisor on file for your program", Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                Toast.makeText(context, "Set your program in Profile first", Toast.LENGTH_SHORT).show()
-                            }
+                // Subject Filter Bar
+                SubjectSelector(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = {
+                        searchQuery = it
+                        // Auto-select subject if the query starts with a valid subject
+                        val letters = it.takeWhile { char -> char.isLetter() }.uppercase()
+                        if (CourseRepository.ALL_SUBJECTS.contains(letters)) {
+                            selectedSubject = letters
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
+                    selectedSubject = selectedSubject,
+                    onSubjectSelected = { selectedSubject = it }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Course List from Firestore
+                Card(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
-                    Text("Send Email", color = Color.Black)
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = { showEmailAdvisorDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
-                ) {
-                    Text("Cancel")
+                    CourseList(
+                        term = selectedTerm,
+                        subject = selectedSubject,
+                        searchQuery = searchQuery,
+                        modifier = Modifier.fillMaxSize(),
+                        onCourseSelected = { course ->
+                            // Extract the category (e.g., "LEC", "TUT", "LAB") from the component string (e.g., "LEC 001")
+                            val category = course.section.componentType
+
+                            // Replace if same course code AND same category is already added
+                            val filtered = scheduledCourses.filter {
+                                !(it.code == course.code && it.section.componentType == category)
+                            }
+                            val updated = filtered + course
+                            scheduledCourses = updated
+
+                            if (!courseColors.containsKey(course.code)) {
+                                val usedColors = courseColors.values.toSet()
+                                val availableColors = COURSE_COLORS - usedColors
+                                val newColor = availableColors.firstOrNull() ?: COURSE_COLORS.random()
+                                courseColors = courseColors + (course.code to newColor)
+                            }
+                            saveSchedule(updated)
+                        }
+                    )
                 }
             }
-        )
-    }
-}
-}
-
-private fun buildPlannerEmailBody(courses: List<Course>, termName: String): String {
-    val sb = StringBuilder()
-    sb.appendLine("Hi,")
-    sb.appendLine()
-    sb.appendLine("I have updated my timetable for $termName. Here is my schedule:")
-    sb.appendLine()
-
-    val grouped = courses.groupBy { it.code }
-    for ((code, sections) in grouped.toSortedMap()) {
-        val title = sections.first().title
-        sb.appendLine("$code - $title")
-        for (course in sections) {
-            val days = course.section.days.joinToString(", ")
-            val time = if (course.section.startTime.hour == 0 && course.section.endTime.hour == 0) "TBA"
-                       else "${course.section.startTime} - ${course.section.endTime}"
-            sb.appendLine("  ${course.section.component} | $days $time | ${course.section.location}")
         }
-        sb.appendLine()
     }
-
-    sb.appendLine("Thank you.")
-    return sb.toString()
 }
 
 @Composable
@@ -437,7 +338,7 @@ fun CourseList(
     var courses by remember { mutableStateOf(listOf<Course>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
-    
+
     LaunchedEffect(term, subject) {
         isLoading = true
         errorMsg = null
@@ -457,8 +358,8 @@ fun CourseList(
             val normalizedQuery = searchQuery.replace(" ", "").lowercase()
             courses.filter { course ->
                 val normalizedCourseCode = course.code.replace(" ", "").lowercase()
-                normalizedCourseCode.contains(normalizedQuery) || 
-                course.title.lowercase().contains(searchQuery.lowercase())
+                normalizedCourseCode.contains(normalizedQuery) ||
+                        course.title.lowercase().contains(searchQuery.lowercase())
             }
         }
     }
@@ -466,7 +367,7 @@ fun CourseList(
     val groupedCourses = remember(filteredCourses) {
         filteredCourses.groupBy { it.code }
     }
-    
+
     var expandedCourses by remember { mutableStateOf(setOf<String>()) }
 
     // Auto-expand if there's only one course matching the search
@@ -505,7 +406,7 @@ fun CourseList(
             groupedCourses.forEach { (courseCode, sections) ->
                 val isExpanded = expandedCourses.contains(courseCode)
                 val courseTitle = sections.firstOrNull()?.title ?: ""
-                
+
                 item(key = courseCode) {
                     Card(
                         modifier = Modifier
@@ -513,8 +414,8 @@ fun CourseList(
                             .padding(vertical = 4.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        onClick = { 
-                            expandedCourses = if (isExpanded) expandedCourses - courseCode else expandedCourses + courseCode 
+                        onClick = {
+                            expandedCourses = if (isExpanded) expandedCourses - courseCode else expandedCourses + courseCode
                         }
                     ) {
                         Row(
@@ -542,7 +443,7 @@ fun CourseList(
                         }
                     }
                 }
-                
+
                 if (isExpanded) {
                     itemsIndexed(sections, key = { index, course -> "${course.code}-$index" }) { _, course ->
                         Card(
@@ -566,7 +467,7 @@ fun CourseList(
                                     )
                                     Text(
                                         text = if (course.section.days.isEmpty()) "TBA"
-                                               else "${course.section.days.joinToString(",")} ${course.section.startTime}-${course.section.endTime}",
+                                        else "${course.section.days.joinToString(",")} ${course.section.startTime}-${course.section.endTime}",
                                         fontSize = 11.sp,
                                         color = Color.Gray
                                     )
@@ -597,10 +498,10 @@ fun TimetableView(
     val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
     val startHour = 8
     val endHour = 22
-    val hourHeight = 60.dp  // Fixed height for one hour
-    
+    val hourHeight = 60.dp
+
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
-    
+
     val dayLayouts = remember(courses) {
         days.associateWith { day ->
             val dayCourses = courses.filter { day in it.section.days }
@@ -638,7 +539,7 @@ fun TimetableView(
                     components.add(comp)
                 }
             }
-            
+
             val layoutMap = mutableMapOf<Course, Pair<Float, Float>>()
             for (comp in components) {
                 val n = comp.size
@@ -664,16 +565,110 @@ fun TimetableView(
             layoutMap
         }
     }
-    
-    // We use BoxWithConstraints to calculate widths dynamically so no horizontal scroll is needed
+
     BoxWithConstraints(modifier = modifier.fillMaxSize().padding(8.dp)) {
         val totalWidth = maxWidth
         val timeColumnWidth = 40.dp
         val dayColumnWidth = (totalWidth - timeColumnWidth) / days.size
 
+        // ────────────────────────────────────────────────
+        // Conflict group bounding boxes – calculated here so dayColumnWidth is available
+        // ────────────────────────────────────────────────
+        data class ConflictBox(
+            val dayIndex: Int,
+            val x: Dp,
+            val y: Dp,
+            val width: Dp,
+            val height: Dp
+        )
+
+        val conflictBoxes by remember(courses, dayLayouts, dayColumnWidth) {
+            val boxes = mutableListOf<ConflictBox>()
+
+            days.forEachIndexed { dayIndex, day ->
+                val dayCourses = courses.filter { day in it.section.days }
+                if (dayCourses.isEmpty()) return@forEachIndexed
+
+                val adj = mutableMapOf<Course, MutableList<Course>>()
+                dayCourses.forEach { adj[it] = mutableListOf() }
+
+                for (i in dayCourses.indices) {
+                    for (j in i + 1 until dayCourses.size) {
+                        val c1 = dayCourses[i]
+                        val c2 = dayCourses[j]
+                        if (c1.section.startTime < c2.section.endTime &&
+                            c2.section.startTime < c1.section.endTime) {
+                            adj[c1]!!.add(c2)
+                            adj[c2]!!.add(c1)
+                        }
+                    }
+                }
+
+                val visited = mutableSetOf<Course>()
+                for (startCourse in dayCourses) {
+                    if (startCourse in visited) continue
+
+                    val group = mutableListOf<Course>()
+                    val queue = ArrayDeque<Course>().apply { add(startCourse) }
+                    visited.add(startCourse)
+
+                    while (queue.isNotEmpty()) {
+                        val curr = queue.removeFirst()
+                        group.add(curr)
+                        adj[curr]?.forEach { neighbor ->
+                            if (neighbor !in visited) {
+                                visited.add(neighbor)
+                                queue.add(neighbor)
+                            }
+                        }
+                    }
+
+                    if (group.size < 2) continue
+
+                    var minTime = Float.MAX_VALUE
+                    var maxTime = Float.MIN_VALUE
+                    var minXFrac = Float.MAX_VALUE
+                    var maxXFrac = Float.MIN_VALUE
+
+                    group.forEach { course ->
+                        val (w, x) = dayLayouts[day]?.get(course) ?: (1f to 0f)
+                        val s = course.section.startTime.toFloat()
+                        val e = course.section.endTime.toFloat()
+
+                        minTime = minOf(minTime, s)
+                        maxTime = maxOf(maxTime, e)
+                        minXFrac = minOf(minXFrac, x)
+                        maxXFrac = maxOf(maxXFrac, x + w)
+                    }
+
+                    val boxWidthFrac = (maxXFrac - minXFrac).coerceAtLeast(0.05f)
+                    val boxHeight = ((maxTime - minTime) * hourHeight.value).dp
+                    val boxY = ((minTime - startHour) * hourHeight.value).dp
+                    val boxX = dayColumnWidth * dayIndex + dayColumnWidth * minXFrac
+
+                    if (boxHeight > 0.dp && boxWidthFrac > 0f) {
+                        boxes.add(
+                            ConflictBox(
+                                dayIndex = dayIndex,
+                                x = boxX,
+                                y = boxY,
+                                width = dayColumnWidth * boxWidthFrac,
+                                height = boxHeight
+                            )
+                        )
+                    }
+                }
+            }
+
+            mutableStateOf(boxes)
+        }
+
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header Row: Days
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Header Row: Days + Clear button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier.width(timeColumnWidth),
                     contentAlignment = Alignment.Center
@@ -682,7 +677,6 @@ fun TimetableView(
                         onClick = onClearAll,
                         contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4)),
-                        // shape = RoundedCornerShape(4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 2.dp)
@@ -691,6 +685,7 @@ fun TimetableView(
                         Text("Clear", color = Color.White, fontSize = 10.sp)
                     }
                 }
+
                 days.forEach { day ->
                     Box(
                         modifier = Modifier
@@ -707,9 +702,8 @@ fun TimetableView(
                 }
             }
 
-            // Timeline Area (Vertical Scroll only)
             val verticalScrollState = rememberScrollState()
-            
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -733,7 +727,7 @@ fun TimetableView(
                         }
                     }
 
-                    // Grid & Courses
+                    // Grid + Courses + Conflict overlays
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -742,29 +736,17 @@ fun TimetableView(
                             .drawBehind {
                                 val strokeWidth = 1.dp.toPx()
                                 val lineColor = Color.LightGray.copy(alpha = 0.5f)
-                                // Horizontal lines
                                 for (i in 0..(endHour - startHour + 1)) {
                                     val y = i * hourHeight.toPx()
-                                    drawLine(
-                                        color = lineColor,
-                                        start = Offset(0f, y),
-                                        end = Offset(size.width, y),
-                                        strokeWidth = strokeWidth
-                                    )
+                                    drawLine(color = lineColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = strokeWidth)
                                 }
-                                // Vertical lines
                                 for (i in 0..days.size) {
                                     val x = i * dayColumnWidth.toPx()
-                                    drawLine(
-                                        color = lineColor,
-                                        start = Offset(x, 0f),
-                                        end = Offset(x, size.height),
-                                        strokeWidth = strokeWidth
-                                    )
+                                    drawLine(color = lineColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = strokeWidth)
                                 }
                             }
                     ) {
-                        // 2. Plot Courses
+                        // Original course cards (unchanged)
                         courses.forEach { course ->
                             course.section.days.forEach { day ->
                                 val dayIndex = days.indexOf(day)
@@ -774,13 +756,13 @@ fun TimetableView(
                                         val (widthFraction, offsetFraction) = layout
                                         val topOffset = (course.section.startTime.toFloat() - startHour) * hourHeight
                                         val height = (course.section.endTime.toFloat() - course.section.startTime.toFloat()) * hourHeight
-                                        
+
                                         if (height > 0.dp) {
                                             val color = courseColors[course.code] ?: Color(0xFFE57373)
                                             Card(
                                                 modifier = Modifier
                                                     .absoluteOffset(
-                                                        x = dayColumnWidth * dayIndex + dayColumnWidth * offsetFraction, 
+                                                        x = dayColumnWidth * dayIndex + dayColumnWidth * offsetFraction,
                                                         y = topOffset
                                                     )
                                                     .width(dayColumnWidth * widthFraction)
@@ -795,7 +777,7 @@ fun TimetableView(
                                                     verticalArrangement = Arrangement.Top
                                                 ) {
                                                     Text(
-                                                        text = course.code, 
+                                                        text = course.code,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Color.Black,
@@ -803,7 +785,7 @@ fun TimetableView(
                                                         lineHeight = 10.sp
                                                     )
                                                     Text(
-                                                        text = course.section.component, 
+                                                        text = course.section.component,
                                                         fontSize = 8.sp,
                                                         color = Color.DarkGray,
                                                         maxLines = 1,
@@ -815,6 +797,21 @@ fun TimetableView(
                                     }
                                 }
                             }
+                        }
+
+                        // Overlay: one red box per conflict group
+                        conflictBoxes.forEach { box ->
+                            Box(
+                                modifier = Modifier
+                                    .absoluteOffset(x = box.x, y = box.y)
+                                    .width(box.width)
+                                    .height(box.height)
+                                    .border(
+                                        width = 2.5.dp,
+                                        color = Color(0xFFF44336), // vivid red
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                            )
                         }
                     }
                 }
@@ -858,4 +855,3 @@ fun TimetableView(
         )
     }
 }
-

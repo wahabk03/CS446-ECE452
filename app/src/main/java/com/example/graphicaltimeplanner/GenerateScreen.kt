@@ -1,9 +1,5 @@
 package com.example.graphicaltimeplanner
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,19 +33,16 @@ fun GenerateScreen(
 
     // Wishlist: course code -> list of all its sections
     var wishlist by remember { mutableStateOf(mapOf<String, List<Course>>()) }
-    
+
     var enforceAll by remember { mutableStateOf(true) }
     var subsetSize by remember { mutableStateOf(3f) }
-    
+
     var generatedSchedules by remember { mutableStateOf<List<List<Course>>>(emptyList()) }
     var currentScheduleIndex by remember { mutableStateOf(0) }
     var isGenerating by remember { mutableStateOf(false) }
     var showNoResultsDialog by remember { mutableStateOf(false) }
     var showOverwriteDialog by remember { mutableStateOf(false) }
-    var showEmailAdvisorDialog by remember { mutableStateOf(false) }
-    var savedScheduleForEmail by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
     // Load saved wishlist and schedules when term changes
     LaunchedEffect(selectedTerm) {
@@ -82,7 +74,7 @@ fun GenerateScreen(
     // Fetch available courses for the selected subject
     var availableCourses by remember { mutableStateOf(emptyList<Course>()) }
     var isLoadingCourses by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(selectedTerm, selectedSubject) {
         isLoadingCourses = true
         try {
@@ -98,9 +90,9 @@ fun GenerateScreen(
             availableCourses
         } else {
             val query = searchQuery.replace(" ", "").lowercase()
-            availableCourses.filter { 
-                it.code.replace(" ", "").lowercase().contains(query) || 
-                it.title.lowercase().contains(searchQuery.lowercase())
+            availableCourses.filter {
+                it.code.replace(" ", "").lowercase().contains(query) ||
+                        it.title.lowercase().contains(searchQuery.lowercase())
             }
         }
         filtered.groupBy { it.code }
@@ -136,7 +128,7 @@ fun GenerateScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
-                
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onBack,
@@ -184,7 +176,7 @@ fun GenerateScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(
-                        onClick = { 
+                        onClick = {
                             generatedSchedules = emptyList()
                             currentScheduleIndex = 0
                         },
@@ -192,7 +184,7 @@ fun GenerateScreen(
                     ) {
                         Text("Edit Wishlist")
                     }
-                    
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = { if (currentScheduleIndex > 0) currentScheduleIndex-- },
@@ -213,9 +205,9 @@ fun GenerateScreen(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Card(
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(12.dp),
@@ -237,7 +229,7 @@ fun GenerateScreen(
                         }
                         colors
                     }
-                    
+
                     Column(modifier = Modifier.fillMaxSize()) {
                         TimetableView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -246,7 +238,7 @@ fun GenerateScreen(
                             onClearAll = { },
                             onRemoveCourse = { }
                         )
-                        
+
                         val onlineCourses = currentSchedule.filter { it.section.days.isEmpty() }
                         if (onlineCourses.isNotEmpty()) {
                             val uniqueOnlineCodes = onlineCourses.map { it.code }.toSet()
@@ -258,7 +250,7 @@ fun GenerateScreen(
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
-                        
+
                         Button(
                             onClick = {
                                 scope.launch {
@@ -269,8 +261,7 @@ fun GenerateScreen(
                                     } else {
                                         val otherTermsSchedule = existingSchedule.filter { it.term != selectedTerm }
                                         CourseRepository.saveUserSchedule(otherTermsSchedule + currentSchedule)
-                                        savedScheduleForEmail = currentSchedule
-                                        showEmailAdvisorDialog = true
+                                        onNavigateToTimetable()
                                     }
                                 }
                             },
@@ -285,7 +276,7 @@ fun GenerateScreen(
                 }
             } else {
                 // --- Configuration View ---
-                
+
                 // Wishlist Display
                 if (wishlist.isNotEmpty()) {
                     Text("Wishlist", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -327,7 +318,7 @@ fun GenerateScreen(
                             )
                             Text("Enforce all courses in wishlist")
                         }
-                        
+
                         if (!enforceAll && wishlist.isNotEmpty()) {
                             Text("Select subset size: ${subsetSize.toInt()}", modifier = Modifier.padding(top = 8.dp))
                             Slider(
@@ -337,7 +328,7 @@ fun GenerateScreen(
                                 steps = (wishlist.size - 2).coerceAtLeast(0)
                             )
                         }
-                        
+
                         Button(
                             onClick = {
                                 isGenerating = true
@@ -375,8 +366,8 @@ fun GenerateScreen(
                 // Subject Selector
                 SubjectSelector(
                     searchQuery = searchQuery,
-                    onSearchQueryChange = { 
-                        searchQuery = it 
+                    onSearchQueryChange = {
+                        searchQuery = it
                         val letters = it.takeWhile { char -> char.isLetter() }.uppercase()
                         if (CourseRepository.ALL_SUBJECTS.contains(letters)) {
                             selectedSubject = letters
@@ -401,7 +392,7 @@ fun GenerateScreen(
                             val sections = groupedAvailable[code] ?: emptyList()
                             val title = sections.firstOrNull()?.title ?: ""
                             val inWishlist = wishlist.containsKey(code)
-                            
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -466,10 +457,8 @@ fun GenerateScreen(
                         scope.launch {
                             val existingSchedule = CourseRepository.loadUserSchedule()
                             val otherTermsSchedule = existingSchedule.filter { it.term != selectedTerm }
-                            val currentSchedule = generatedSchedules[currentScheduleIndex]
-                            CourseRepository.saveUserSchedule(otherTermsSchedule + currentSchedule)
-                            savedScheduleForEmail = currentSchedule
-                            showEmailAdvisorDialog = true
+                            CourseRepository.saveUserSchedule(otherTermsSchedule + generatedSchedules[currentScheduleIndex])
+                            onNavigateToTimetable()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
@@ -487,97 +476,6 @@ fun GenerateScreen(
             }
         )
     }
-
-    // Email advisor dialog
-    if (showEmailAdvisorDialog) {
-        LaunchedEffect(Unit) {
-            CourseRepository.getAdvisors() // Ensure advisors are cached
-        }
-
-        val termName = CourseRepository.TERM_MAPPINGS.find { it.first == selectedTerm }?.second ?: selectedTerm
-
-        AlertDialog(
-            onDismissRequest = {
-                showEmailAdvisorDialog = false
-                onNavigateToTimetable()
-            },
-            title = { Text("Notify Academic Advisor?") },
-            text = {
-                Text("Your timetable has been saved. Would you like to email your academic advisor about your new schedule?")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showEmailAdvisorDialog = false
-                        scope.launch {
-                            val (programSlug, faculty, yearLevel) = CourseRepository.getUserProfile()
-                            if (programSlug != null && faculty != null) {
-                                val isFirstYear = (yearLevel ?: 1) <= 1
-                                val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
-                                if (advisor != null) {
-                                    val body = buildScheduleEmailBody(savedScheduleForEmail, termName)
-                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                        data = Uri.parse("mailto:")
-                                        putExtra(Intent.EXTRA_EMAIL, arrayOf(advisor.email))
-                                        putExtra(Intent.EXTRA_SUBJECT, "Timetable Update - $termName")
-                                        putExtra(Intent.EXTRA_TEXT, body)
-                                    }
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (e: ActivityNotFoundException) {
-                                        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
-                                    }
-                                } else {
-                                    Toast.makeText(context, "No advisor on file for your program", Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                Toast.makeText(context, "Set your program in Profile first", Toast.LENGTH_SHORT).show()
-                            }
-                            onNavigateToTimetable()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(R.color.uw_gold_lvl4))
-                ) {
-                    Text("Send Email", color = Color.Black)
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = {
-                        showEmailAdvisorDialog = false
-                        onNavigateToTimetable()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
-                ) {
-                    Text("Skip")
-                }
-            }
-        )
-    }
-}
-
-private fun buildScheduleEmailBody(courses: List<Course>, termName: String): String {
-    val sb = StringBuilder()
-    sb.appendLine("Hi,")
-    sb.appendLine()
-    sb.appendLine("I have updated my timetable for $termName. Here is my schedule:")
-    sb.appendLine()
-
-    val grouped = courses.groupBy { it.code }
-    for ((code, sections) in grouped.toSortedMap()) {
-        val title = sections.first().title
-        sb.appendLine("$code - $title")
-        for (course in sections) {
-            val days = course.section.days.joinToString(", ")
-            val time = if (course.section.startTime.hour == 0 && course.section.endTime.hour == 0) "TBA"
-                       else "${course.section.startTime} - ${course.section.endTime}"
-            sb.appendLine("  ${course.section.component} | $days $time | ${course.section.location}")
-        }
-        sb.appendLine()
-    }
-
-    sb.appendLine("Thank you.")
-    return sb.toString()
 }
 
 fun generateTimetables(
@@ -590,7 +488,7 @@ fun generateTimetables(
     if (courseCodes.isEmpty()) return emptyList()
 
     val targetSize = if (enforceAll) courseCodes.size else subsetSize.coerceAtMost(courseCodes.size)
-    
+
     // 1. Generate combinations of course codes of size `targetSize`
     val combinations = mutableListOf<List<String>>()
     fun getCombs(start: Int, current: List<String>) {
@@ -606,10 +504,10 @@ fun generateTimetables(
 
     // 2. For each combination, find valid schedules
     val seenSignatures = mutableSetOf<String>()
-    
+
     for (comb in combinations) {
         if (results.size >= 5) break
-        
+
         // For each course in comb, we need exactly one section per component
         val componentChoices = mutableListOf<List<Course>>()
         var validCombination = true
@@ -626,9 +524,9 @@ fun generateTimetables(
                 }
             }
         }
-        
+
         if (!validCombination) continue
-        
+
         // DFS to pick one from each componentChoice
         fun dfs(index: Int, currentSchedule: List<Course>) {
             if (results.size >= 5) return
@@ -641,17 +539,17 @@ fun generateTimetables(
 
                 // We successfully scheduled exactly one section for every required component of every course in the combination.
                 // Create a visual signature to prevent identical-looking schedules
-                val signature = currentSchedule.map { 
-                    "${it.code}-${it.section.componentType}-${it.section.days.joinToString("")}-${it.section.startTime}-${it.section.endTime}" 
+                val signature = currentSchedule.map {
+                    "${it.code}-${it.section.componentType}-${it.section.days.joinToString("")}-${it.section.startTime}-${it.section.endTime}"
                 }.sorted().joinToString("|")
-                
+
                 if (signature !in seenSignatures) {
                     seenSignatures.add(signature)
                     results.add(currentSchedule)
                 }
                 return
             }
-            
+
             for (course in componentChoices[index]) {
                 // Check conflict
                 var conflict = false
@@ -669,9 +567,9 @@ fun generateTimetables(
                 }
             }
         }
-        
+
         dfs(0, emptyList())
     }
-    
+
     return results
 }
