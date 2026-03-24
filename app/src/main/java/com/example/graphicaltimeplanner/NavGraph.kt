@@ -43,101 +43,49 @@ fun NavGraph(
 
         composable("home") {
             HomeScreen(
-                onNavigateToTimetable = { navController.navigate("timetable") },
-                onNavigateToAssistant = { navController.navigate("ai") },
-                onNavigateToCourses   = { navController.navigate("courses") },
-                onNavigateToChatbot   = { navController.navigate("chatbot") },
-                onViewProfile         = { navController.navigate("profile") },
-                onNavigateToAdvisor   = { navController.navigate("advisor") },
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                }
-            )
-        }
-
-        composable("timetable") {
-            PlannerScreen(onBack = { navController.popBackStack() })
-        }
-
-        // Legacy GenerateScreen kept in case it is still used elsewhere
-        composable("assistant") {
-            GenerateScreen(
-                onBack = { navController.popBackStack() },
                 onNavigateToTimetable = {
-                    navController.navigate("timetable") { popUpTo("home") }
+                    navController.navigate("timetable")
+                },
+                onNavigateToAssistant = {
+                    navController.navigate("assistant")
+                },
+                onNavigateToProfile = {
+                    navController.navigate("profile")
+                },
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
-            )
-        }
-
-        // New AI screen
-        composable("ai") {
-            AIScreen(
-                onViewProfile   = { navController.navigate("profile") },
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                },
-                onNavigateToHome     = { navController.navigate("home") { popUpTo("ai") { inclusive = true } } },
-                onNavigateToCourses  = { navController.navigate("courses") },
-                onNavigateToChatbot  = { navController.navigate("chatbot") },
-                onNavigateToAdvisor  = { navController.navigate("advisor") }
-            )
-        }
-
-        composable("courses") {
-            CourseScreen(
-                onViewProfile = { navController.navigate("profile") },
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                },
-                onBackToHome = {
-                    navController.navigate("home") { popUpTo("courses") { inclusive = true } }
-                },
-                onNavigateToChatbot = { navController.navigate("chatbot") },
-                onNavigateToAi = { navController.navigate("ai") },
-                onNavigateToAdvisor = { navController.navigate("advisor") }
-            )
-        }
-
-        composable("chatbot") {
-            ChatbotScreen(
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                },
-                onViewProfile     = { navController.navigate("profile") },
-                onNavigateToHome  = {
-                    navController.navigate("home") { popUpTo("chatbot") { inclusive = true } }
-                },
-                onNavigateToCourses = { navController.navigate("courses") },
-                onNavigateToAi = { navController.navigate("ai") },
-                onNavigateToAdvisor = { navController.navigate("advisor") }
             )
         }
 
         composable("profile") {
             ProfileScreen(
-                onBack   = { navController.popBackStack() },
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
 
-        composable("advisor") {
-            AdvisorScreen(
-                onViewProfile      = { navController.navigate("profile") },
-                onLogout = {
-                    AppState.logout()
-                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
+        composable("timetable") {
+            PlannerScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("assistant") {
+            GenerateScreen(
+                onBack = {
+                    navController.popBackStack()
                 },
-                onNavigateToHome    = { navController.navigate("home") { popUpTo("advisor") { inclusive = true } } },
-                onNavigateToCourses = { navController.navigate("courses") },
-                onNavigateToChatbot = { navController.navigate("chatbot") },
-                onNavigateToAi      = { navController.navigate("ai") }
+                onNavigateToTimetable = {
+                    navController.navigate("timetable") {
+                        popUpTo("home")
+                    }
+                }
             )
         }
     }
