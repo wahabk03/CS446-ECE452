@@ -19,3 +19,4 @@ app/google-services.json
 serviceAccountKey.json
 *__pycache__/
 .env
+utils/

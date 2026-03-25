@@ -8,7 +8,7 @@ SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "your_serpapi_key_here")
 
 # Model Configuration
-MODEL_NAME = "THUDM/GLM-4-9B-0414" # Text model with tool-calling capabilities
+MODEL_NAME = "Pro/MiniMaxAI/MiniMax-M2.5" # Need a text model with tool-calling capabilities
 TEMPERATURE = 0.7
 MAX_TOKENS = 4096
 

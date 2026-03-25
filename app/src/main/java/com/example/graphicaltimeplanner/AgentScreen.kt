@@ -19,12 +19,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ChatMessage(val role: String = "", val content: String = "", val attachedFileName: String? = null)
@@ -54,12 +61,14 @@ private fun Uri.getFileName(context: android.content.Context): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}) {
+fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateToTimetable: () -> Unit = {}) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var inputValue by remember { mutableStateOf("") }
     var attachedFileUri by remember { mutableStateOf<Uri?>(null) }
     var attachedFileName by remember { mutableStateOf<String?>(null) }
+    var isWaitingForAgent by remember { mutableStateOf(false) }
+    var showRedirectButton by remember { mutableStateOf(false) }
     
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -203,7 +212,6 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}) {
                             .padding(vertical = 12.dp),
                         horizontalArrangement = Arrangement.Start
                     ) {
-                        // Optional: You could add an AI avatar icon here
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "Assistant",
@@ -212,12 +220,16 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}) {
                                 color = Color.DarkGray,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            Text(
-                                text = msg.content,
-                                color = Color.Black,
-                                fontSize = 15.sp,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            if (msg.content == "typing...") {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorResource(R.color.uw_gold_lvl4), strokeWidth = 2.dp)
+                            } else {
+                                Text(
+                                    text = msg.content,
+                                    color = Color.Black,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -243,6 +255,63 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}) {
                     attachedFileName = null
                 }, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Remove File", tint = Color.Gray)
+                }
+            }
+        }
+
+        // Action popup button
+        if (showRedirectButton) {
+            val goldColor = colorResource(R.color.uw_gold_lvl4)
+            var progress by remember { mutableFloatStateOf(1f) }
+            
+            LaunchedEffect(Unit) {
+                val duration = 5000L
+                val startTime = System.currentTimeMillis()
+                while (true) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (elapsed > duration) {
+                        progress = 0f
+                        break
+                    }
+                    progress = 1f - elapsed.toFloat() / duration
+                    delay(16L)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .drawBehind {
+                        val strokeWidthPx = 3.dp.toPx()
+                        val cornerRadiusPx = 24.dp.toPx() // typical Button roundness
+                        val path = Path().apply {
+                            addRoundRect(
+                                RoundRect(
+                                    left = strokeWidthPx / 2,
+                                    top = strokeWidthPx / 2,
+                                    right = size.width - strokeWidthPx / 2,
+                                    bottom = size.height - strokeWidthPx / 2,
+                                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
+                                )
+                            )
+                        }
+                        val pm = PathMeasure()
+                        pm.setPath(path, false)
+                        val segment = Path()
+                        pm.getSegment(0f, pm.length * progress, segment, true)
+                        drawPath(segment, color = goldColor, style = Stroke(strokeWidthPx))
+                    }
+            ) {
+                Button(
+                    onClick = {
+                        showRedirectButton = false
+                        onNavigateToTimetable()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                ) {
+                    Text("View Timetable Change", color = goldColor, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -279,36 +348,71 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}) {
                             val currentMsgs = messages + ChatMessage("user", inputValue, attachedFileName)
                             messages = currentMsgs
                             val userMsg = inputValue
+                            val fileUriCopy = attachedFileUri
+                            val fileNameCopy = attachedFileName
                             inputValue = ""
                             attachedFileUri = null
                             attachedFileName = null
+                            isWaitingForAgent = true
                             
-                            // Placeholder for actual Agent API call
-                            val newMsgs = currentMsgs + ChatMessage("assistant", "I received your message. The Python AI agent will process this later!")
-                            messages = newMsgs
-
-                            // Save to Firestore
+                            // Save user message initially
                             val currentSessionId = sessionId
                             coroutineScope.launch {
                                 var idToSave = currentSessionId
+                                var isNewSession = false
                                 if (idToSave == null) {
+                                    isNewSession = true
                                     val newSession = ChatRepository.createChatSession()
                                     idToSave = newSession.id
                                     sessionId = idToSave
-                                    ChatStateManager.activeSession = newSession.copy(messages = newMsgs)
+                                    ChatStateManager.activeSession = newSession.copy(messages = currentMsgs)
                                 } else {
-                                    ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
+                                    ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = currentMsgs)
                                 }
+                                ChatRepository.saveChatMessages(idToSave!!, currentMsgs)
+
+                                // Summarize in the background if it's the first message
+                                if (isNewSession) {
+                                    launch {
+                                        val generatedTitle = AgentApi.summarizeChat(userMsg)
+                                        ChatRepository.updateChatName(idToSave!!, generatedTitle)
+                                        ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(name = generatedTitle)
+                                    }
+                                }
+                                
+                                // Show loading text
+                                messages = currentMsgs + ChatMessage("assistant", "typing...")
+                                
+                                // Fetch from Agent
+                                val agentResponse = AgentApi.sendMessage(
+                                    context = context,
+                                    message = userMsg,
+                                    history = currentMsgs.dropLast(1), // sending history without the new user msg
+                                    fileUri = fileUriCopy,
+                                    fileName = fileNameCopy
+                                )
+                                
+                                val newMsgs = currentMsgs + ChatMessage("assistant", agentResponse.response)
+                                isWaitingForAgent = false
+                                messages = newMsgs
+                                ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
                                 ChatRepository.saveChatMessages(idToSave!!, newMsgs)
+
+                                // Trigger redirect button if the AI called show_timetable_button tool
+                                if (agentResponse.showButton) {
+                                    showRedirectButton = true
+                                    delay(5000L) // Show for 5 seconds
+                                    showRedirectButton = false
+                                }
                             }
                         }
                     },
-                    enabled = inputValue.isNotBlank() || attachedFileUri != null
+                    enabled = (inputValue.isNotBlank() || attachedFileUri != null) && !isWaitingForAgent
                 ) {
                     Icon(
                         imageVector = Icons.Default.Send,
                         contentDescription = "Send Message",
-                        tint = if (inputValue.isNotBlank() || attachedFileUri != null) colorResource(R.color.uw_gold_lvl4) else Color.Gray
+                        tint = if ((inputValue.isNotBlank() || attachedFileUri != null) && !isWaitingForAgent) colorResource(R.color.uw_gold_lvl4) else Color.Gray
                     )
                 }
             }

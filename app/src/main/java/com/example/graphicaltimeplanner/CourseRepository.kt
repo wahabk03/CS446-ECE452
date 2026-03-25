@@ -152,23 +152,23 @@ object CourseRepository {
     )
 
     private fun mapToCourse(map: Map<String, Any>): Course = Course(
-        code = map["code"] as? String ?: "",
-        title = map["title"] as? String ?: "",
-        term = map["term"] as? String ?: "",
-        units = map["units"] as? String ?: "",
+        code = map["code"]?.toString() ?: "",
+        title = map["title"]?.toString() ?: "",
+        term = map["term"]?.toString() ?: "",
+        units = map["units"]?.toString() ?: "",
         section = Section(
-            classNumber = map["classNumber"] as? String ?: "",
-            component = map["component"] as? String ?: "",
-            days = (map["days"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            classNumber = map["classNumber"]?.toString() ?: "",
+            component = map["component"]?.toString() ?: "",
+            days = (map["days"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             startTime = Time(
-                (map["startHour"] as? Long)?.toInt() ?: 0,
-                (map["startMinute"] as? Long)?.toInt() ?: 0
+                (map["startHour"] as? Number)?.toInt() ?: 0,
+                (map["startMinute"] as? Number)?.toInt() ?: 0
             ),
             endTime = Time(
-                (map["endHour"] as? Long)?.toInt() ?: 0,
-                (map["endMinute"] as? Long)?.toInt() ?: 0
+                (map["endHour"] as? Number)?.toInt() ?: 0,
+                (map["endMinute"] as? Number)?.toInt() ?: 0
             ),
-            location = map["location"] as? String ?: ""
+            location = map["location"]?.toString() ?: ""
         )
     )
 

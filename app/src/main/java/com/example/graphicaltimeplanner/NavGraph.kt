@@ -88,6 +88,11 @@ fun NavGraph(
                 },
                 onHistoryClick = {
                     navController.navigate("chat_history")
+                },
+                onNavigateToTimetable = {
+                    navController.navigate("timetable") {
+                        popUpTo("home") 
+                    }
                 }
             )
         }
