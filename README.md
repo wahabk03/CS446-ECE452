@@ -21,10 +21,12 @@ A graphical course scheduling and planning application for UWaterloo students.
 - **Home Screen**: The central hub for navigating the application.
 - **My Timetable**: A visual, interactive planner where users can manually search, add, and manage their courses across different semesters.
 - **Assistant**: An automated scheduling tool. Users can build a wishlist of courses, and the Assistant will use a Depth-First Search (DFS) algorithm to generate conflict-free schedule permutations. Users can customize the subset size and export their preferred generated schedule directly to their Timetable.
+- **AI Agent Chatbot**: An intelligent LLM-powered chat interface embedded within the app. Users can discuss schedule insights, ask about prerequisites, upload transcript PDFs, and get personalized recommendations. The AI has direct access to Firebase tools to safely build, modify, and clear the user's timetable automatically.
+- **Flask Agent Backend**: A standalone Python REST API powering the LLM capabilities, securely proxying Firebase accesses and interacting dynamically with the Android client.
 
 ## Setup & Installation
 
-### 1. Python Backend Setup (Scraping)
+### 1. Python Backend Setup (Scraping & Agent Server)
 We recommend using [`uv`](https://github.com/astral-sh/uv) for fast Python package management.
 
 1. **Create Virtual Environment:**
@@ -36,7 +38,7 @@ We recommend using [`uv`](https://github.com/astral-sh/uv) for fast Python packa
 
 2. **Install Dependencies:**
    ```bash
-   uv pip install -r parse/requirements.txt
+   uv pip install -r requirements.txt
    ```
 
 ### 2. Database Population
@@ -44,7 +46,7 @@ To populate the Firestore database with UWaterloo course data:
 
 1. **Prerequisite:** You need a Firebase Service Account key.
    - Go to Firebase Console -> Project Settings -> Service Accounts.
-   - Generate a new private key and save it as `parse/serviceAccountKey.json`.
+   - Generate a new private key and save it as `parse/serviceAccountKey.json` (for the scraper) and another copy or symlink as `serviceAccountKey.json` in the root folder (for the AI Agent).
    - **Do not commit this file!**
 
 2. **Run Scraper & Upload:**
@@ -52,7 +54,16 @@ To populate the Firestore database with UWaterloo course data:
    python parse/script_populate_db.py
    ```
 
-### 3. Android App Setup
+### 3. Run the AI Agent Server
+The Android app communicates with a local Flask server to fetch LLM responses and manage tools.
+1. **Configure API Keys:** Make sure your `SILICONFLOW_API_KEY` or `SERPAPI_API_KEY` are configured properly in `agent/llm_config.py` (or through environment variables).
+2. **Start the Flask Backend:**
+   ```bash
+   python agent/server_agent.py
+   ```
+   > Keep this terminal running in the background. The Android app connects to it securely at `10.0.2.2:5000`.
+
+### 4. Android App Setup
 
 #### Build from Command Line
 To build and install the debug APK to your connected device or emulator:

@@ -5,3 +5,5 @@ tika
 firebase-admin
 google-cloud-firestore
 google-auth
+Flask
+pypdf
