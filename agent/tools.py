@@ -90,24 +90,63 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
             if not target_id:
                 # To prevent context overflow, don't return the entire courses collection.
                 return {"error": "target_id (course document ID like '1255_ACTSC_221') is required for course_info."}
+
+            def _course_doc_id_candidates(raw_id: str):
+                raw = (raw_id or "").strip()
+                if not raw:
+                    return []
+
+                candidates = []
+
+                def add(v: str):
+                    if v and v not in candidates:
+                        candidates.append(v)
+
+                add(raw)
+                add(raw.replace(" ", "_"))
+
+                norm = raw.replace("_", " ")
+                parts = [p for p in norm.split() if p]
+                if len(parts) >= 3 and parts[0].isdigit():
+                    term = parts[0]
+                    subject = parts[1].upper()
+                    catalog = "".join(parts[2:]).upper()
+                    add(f"{term}_{subject}_{catalog}")
+                    add(f"{term}_{subject} {catalog}")
+                elif len(parts) == 2 and parts[0].isdigit():
+                    term = parts[0]
+                    rest = parts[1].upper()
+                    subject = "".join(ch for ch in rest if ch.isalpha())
+                    catalog = "".join(ch for ch in rest if ch.isdigit())
+                    if subject and catalog:
+                        add(f"{term}_{subject}_{catalog}")
+
+                return candidates
+
+            candidates = _course_doc_id_candidates(target_id)
+            for candidate in candidates:
+                doc = db.collection("courses").document(candidate).get()
+                if doc.exists:
+                    return {"course_data": doc.to_dict(), "resolved_target_id": candidate}
+
             doc = db.collection("courses").document(target_id).get()
             if doc.exists:
                 return {"course_data": doc.to_dict()}
             else:
-                # Try finding courses that start with the prefix if it's incomplete
-                # Basic workaround if AI doesn't know exact doc ID format
-                docs = db.collection("courses").where("__name__", ">=", target_id).where("__name__", "<=", target_id + "\uf8ff").limit(5).stream()
-                matches = {d.id: d.to_dict() for d in docs}
-                if matches:
-                    return {"course_data_matches": matches}
-                return {"error": f"Course document {target_id} not found."}
+                return {
+                    "error": f"Course document {target_id} not found.",
+                    "tried_target_ids": candidates
+                }
                 
         elif query_type == "user_schedule":
             doc = db.collection("users").document(uid).get()
             if doc.exists:
                 data = doc.to_dict() or {}
-                return {"scheduledCourses": data.get("scheduledCourses", [])}
-            return {"scheduledCourses": [], "message": "User document not found or no schedule saved."}
+                # Return the timetables specifically so the agent can see active timetables and their courses
+                timetables = data.get("timetables", [])
+                active_id = data.get("activeTimetableId")
+                return {"timetables": timetables, "activeTimetableId": active_id}
+            return {"timetables": [], "message": "User document not found or no schedule saved."}
             
         elif query_type == "user_assistant":
             if not target_id:
@@ -123,6 +162,47 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
         else:
             return {"error": f"Unknown query_type: {query_type}"}
 
+    except Exception as e:
+        return {"error": str(e)}
+
+def create_timetable(uid: str, title: str, term: str) -> dict:
+    """
+    Creates a new timetable for the user.
+    """
+    import uuid
+    print(f"Creating timetable - User: {uid}, Title: {title}, Term: {term}")
+    if not firebase_admin._apps:
+        return {"error": "Firebase Admin SDK is not initialized."}
+        
+    try:
+        db = firestore.client()
+        user_ref = db.collection("users").document(uid)
+        doc = user_ref.get()
+        data = doc.to_dict() or {} if doc.exists else {}
+        
+        timetables = data.get("timetables", [])
+        new_id = str(uuid.uuid4())
+        
+        new_tt = {
+            "id": new_id,
+            "name": title,
+            "term": term,
+            "courses": []
+        }
+        timetables.append(new_tt)
+        
+        user_ref.set({"timetables": timetables, "activeTimetableId": new_id}, merge=True)
+
+        # Read back immediately to ensure the write persisted before reporting success.
+        verify_doc = user_ref.get()
+        verify_data = verify_doc.to_dict() or {} if verify_doc.exists else {}
+        verify_timetables = verify_data.get("timetables", [])
+        if any(t.get("id") == new_id for t in verify_timetables):
+            return {
+                "message": f"Successfully created new timetable '{title}' for term {term}.",
+                "timetable_id": new_id
+            }
+        return {"error": "Timetable creation could not be confirmed after write."}
     except Exception as e:
         return {"error": str(e)}
 
@@ -172,6 +252,29 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
                 
         return {"startHour": start_h, "startMinute": start_m, "endHour": end_h, "endMinute": end_m, "days": days}
 
+    def to_minutes(hour_val, minute_val):
+        return int(hour_val) * 60 + int(minute_val)
+
+    def has_time_conflict(existing_course, candidate_course):
+        existing_days = set(existing_course.get("days", []) or [])
+        candidate_days = set(candidate_course.get("days", []) or [])
+        if not existing_days or not candidate_days:
+            return False
+
+        overlap_days = existing_days.intersection(candidate_days)
+        if not overlap_days:
+            return False
+
+        existing_start = to_minutes(existing_course.get("startHour", 0), existing_course.get("startMinute", 0))
+        existing_end = to_minutes(existing_course.get("endHour", 0), existing_course.get("endMinute", 0))
+        candidate_start = to_minutes(candidate_course.get("startHour", 0), candidate_course.get("startMinute", 0))
+        candidate_end = to_minutes(candidate_course.get("endHour", 0), candidate_course.get("endMinute", 0))
+
+        if existing_end <= existing_start or candidate_end <= candidate_start:
+            return False
+
+        return candidate_start < existing_end and existing_start < candidate_end
+
     print(f"Adding course to timetable - User: {uid}, Term: {term}, Course: {course_code}, Sections: {sections}")
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
@@ -199,7 +302,28 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
         user_ref = db.collection("users").document(uid)
         doc = user_ref.get()
         data = doc.to_dict() or {} if doc.exists else {}
-        scheduled_courses = data.get("scheduledCourses", [])
+        
+        timetables = data.get("timetables", [])
+        active_id = data.get("activeTimetableId")
+        target_idx = -1
+        
+        for i, t in enumerate(timetables):
+            if t.get("id") == active_id:
+                target_idx = i
+                break
+                
+        if target_idx == -1 and len(timetables) > 0:
+            target_idx = len(timetables) - 1
+            
+        if target_idx == -1:
+            import uuid
+            new_id = str(uuid.uuid4())
+            new_tt = {"id": new_id, "name": "My Timetable", "term": term, "courses": []}
+            timetables.append(new_tt)
+            target_idx = 0
+            user_ref.set({"activeTimetableId": new_id}, merge=True)
+            
+        scheduled_courses = timetables[target_idx].get("courses", [])
         
         added_count = 0
         added_components = []
@@ -224,18 +348,36 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
                 }
                 
                 prefix = sec_req.split(" ")[0] if " " in sec_req else sec_req
-                scheduled_courses = [
+                filtered_courses = [
                     c for c in scheduled_courses 
                     if not (c.get("code") == course_code and c.get("term") == term and c.get("component", "").startswith(prefix))
                 ]
-                
-                scheduled_courses.append(new_course)
+
+                for existing in filtered_courses:
+                    if str(existing.get("term", "")) != str(term):
+                        continue
+                    if has_time_conflict(existing, new_course):
+                        conflict_time = (
+                            f"{existing.get('startHour', 0):02d}:{existing.get('startMinute', 0):02d}-"
+                            f"{existing.get('endHour', 0):02d}:{existing.get('endMinute', 0):02d}"
+                        )
+                        return {
+                            "error": (
+                                f"Time conflict detected when adding {course_code} {sec_req}. "
+                                f"Conflicts with {existing.get('code', 'Unknown')} {existing.get('component', '')} "
+                                f"on {existing.get('days', [])} at {conflict_time}."
+                            )
+                        }
+
+                filtered_courses.append(new_course)
+                scheduled_courses = filtered_courses
                 added_count += 1
                 added_components.append(sec_req)
             else:
                 return {"error": f"Section component '{sec_req}' not found for course {course_code}. Available components: {list(section_map.keys())}"}
                 
-        user_ref.set({"scheduledCourses": scheduled_courses}, merge=True)
+        timetables[target_idx]["courses"] = scheduled_courses
+        user_ref.set({"timetables": timetables}, merge=True)
         return {"message": f"Successfully added/updated sections: {', '.join(added_components)} for {course_code} in term {term}."}
     except Exception as e:
         return {"error": str(e)}
@@ -257,7 +399,20 @@ def delete_course_from_timetable(uid: str, term: str, course_code: str) -> dict:
             return {"message": "User document not found."}
             
         data = doc.to_dict() or {}
-        scheduled_courses = data.get("scheduledCourses", [])
+        timetables = data.get("timetables", [])
+        active_id = data.get("activeTimetableId")
+        target_idx = -1
+        for i, t in enumerate(timetables):
+            if t.get("id") == active_id:
+                target_idx = i
+                break
+        if target_idx == -1 and len(timetables) > 0:
+            target_idx = len(timetables) - 1
+            
+        if target_idx == -1:
+            return {"message": "You don't have any existing timetables."}
+            
+        scheduled_courses = timetables[target_idx].get("courses", [])
         
         original_length = len(scheduled_courses)
         scheduled_courses = [c for c in scheduled_courses if not (str(c.get("term")) == str(term) and c.get("code") == course_code)]
@@ -265,7 +420,8 @@ def delete_course_from_timetable(uid: str, term: str, course_code: str) -> dict:
         if len(scheduled_courses) == original_length:
             return {"message": f"Course {course_code} for term {term} is not present in the timetable."}
             
-        user_ref.set({"scheduledCourses": scheduled_courses}, merge=True)
+        timetables[target_idx]["courses"] = scheduled_courses
+        user_ref.set({"timetables": timetables}, merge=True)
         return {"message": f"Successfully deleted {course_code} from timetable for term {term}."}
     except Exception as e:
         return {"error": str(e)}
@@ -287,11 +443,25 @@ def clear_timetable(uid: str, term: str) -> dict:
             return {"message": "User document not found."}
             
         data = doc.to_dict() or {}
-        scheduled_courses = data.get("scheduledCourses", [])
+        timetables = data.get("timetables", [])
+        active_id = data.get("activeTimetableId")
+        target_idx = -1
+        for i, t in enumerate(timetables):
+            if t.get("id") == active_id:
+                target_idx = i
+                break
+        if target_idx == -1 and len(timetables) > 0:
+            target_idx = len(timetables) - 1
+            
+        if target_idx == -1:
+            return {"message": "You don't have any existing timetables."}
+            
+        scheduled_courses = timetables[target_idx].get("courses", [])
         
         scheduled_courses = [c for c in scheduled_courses if str(c.get("term")) != str(term)]
         
-        user_ref.set({"scheduledCourses": scheduled_courses}, merge=True)
+        timetables[target_idx]["courses"] = scheduled_courses
+        user_ref.set({"timetables": timetables}, merge=True)
         return {"message": f"Successfully cleared timetable for term {term}."}
     except Exception as e:
         return {"error": str(e)}
@@ -339,6 +509,21 @@ TOOLS_SCHEMA = [
                     }
                 },
                 "required": ["query_type"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_timetable",
+            "description": "Creates a new empty timetable for a specific term.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "The title of the timetable (e.g., 'My Core Schedule')." },
+                    "term": { "type": "string", "description": "The term for this timetable (e.g., 'Winter 2026' or '1261')." }
+                },
+                "required": ["title", "term"]
             }
         }
     },

@@ -5,9 +5,17 @@ import base64
 import tempfile
 import uuid
 from agent import Agent
-from tools import read_uploaded_file, browse_online, query_database_readonly, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
+from tools import read_uploaded_file, browse_online, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
 
 app = Flask(__name__)
+
+MUTATION_TOOLS = {"create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"}
+
+def _is_tool_error_response(tool_response) -> bool:
+    if isinstance(tool_response, dict):
+        return bool(tool_response.get("error"))
+    text = str(tool_response).strip().lower()
+    return text.startswith("error")
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -58,6 +66,8 @@ def chat():
 
     # Loop to handle tool calls
     show_button = False
+    had_mutation_success = False
+    had_mutation_error = False
     while True:
         response_msg = agent.chat(messages, attached_file_content=attached_content, tools=TOOLS_SCHEMA)
         attached_content = None # Only attach once
@@ -77,15 +87,17 @@ def chat():
                 args = {}
             
             # **Implicitly pass UID correctly to functions requiring it**
-            if func_name in ["query_database_readonly", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"]:
+            if func_name in ["query_database_readonly", "create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"]:
                 args["uid"] = uid
-            
+
             tool_response = "Error: Tool execution failed"
             try:
                 if func_name == "browse_online":
                     tool_response = browse_online(**args)
                 elif func_name == "query_database_readonly":
                     tool_response = query_database_readonly(**args)
+                elif func_name == "create_timetable":
+                    tool_response = create_timetable(**args)
                 elif func_name == "add_course_to_timetable":
                     tool_response = add_course_to_timetable(**args)
                 elif func_name == "delete_course_from_timetable":
@@ -93,12 +105,25 @@ def chat():
                 elif func_name == "clear_timetable":
                     tool_response = clear_timetable(**args)
                 elif func_name == "show_timetable_button":
-                    show_button = True
-                    tool_response = show_timetable_button(**args)
+                    if had_mutation_success and not had_mutation_error:
+                        show_button = True
+                        tool_response = show_timetable_button(**args)
+                    else:
+                        tool_response = {
+                            "error": "Cannot show timetable button because no successful timetable update was confirmed in this request."
+                        }
                 else:
                     tool_response = f"Warning: Function {func_name} not recognized."
             except Exception as e:
                 tool_response = f"Error executing {func_name}: {e}"
+
+            if func_name in MUTATION_TOOLS:
+                if _is_tool_error_response(tool_response):
+                    had_mutation_error = True
+                else:
+                    had_mutation_success = True
+
+            print(f"Tool '{func_name}' response: {tool_response}")
             
             if isinstance(tool_response, dict):
                 tool_response = json.dumps(tool_response, ensure_ascii=False)

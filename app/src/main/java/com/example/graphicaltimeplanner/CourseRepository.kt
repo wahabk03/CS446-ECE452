@@ -172,13 +172,95 @@ object CourseRepository {
         )
     )
 
+    // ─── Profile helpers ──────────────────────────────────────────────────────
+
+    /** Persist the user's display name to Firestore users/{uid}.displayName */
+    suspend fun saveUserProfile(displayName: String) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        try {
+            db.collection("users").document(userId)
+                .update("displayName", displayName)
+                .await()
+        } catch (e: Exception) {
+            // Document may not exist yet – use set with merge
+            try {
+                db.collection("users").document(userId)
+                    .set(mapOf("displayName" to displayName), com.google.firebase.firestore.SetOptions.merge())
+                    .await()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error saving user profile", e2)
+            }
+        }
+    }
+
+    /** Load the user's display name from Firestore. Returns null if not found. */
+    suspend fun loadUserProfile(): String? {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return null
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            doc.getString("displayName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading user profile", e)
+            null
+        }
+    }
+
+    // ─── Schedule helpers ─────────────────────────────────────────────────────
+
+    // ── Multi-timetable helpers ───────────────────────────────────────────────
+
+    suspend fun saveAllTimetables(timetables: List<Timetable>, activeTimetableId: String?) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        try {
+            val data = mapOf(
+                "timetables" to timetables.map { tt ->
+                    mapOf(
+                        "id" to tt.id,
+                        "name" to tt.name,
+                        "term" to tt.term,
+                        "courses" to tt.courses.map { courseToMap(it) }
+                    )
+                },
+                "activeTimetableId" to (activeTimetableId ?: "")
+            )
+            db.collection("users").document(userId)
+                .set(data, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving all timetables", e)
+        }
+    }
+
+    suspend fun loadAllTimetables(): Pair<List<Timetable>, String?> {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return Pair(emptyList(), null)
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            val rawList = doc.get("timetables") as? List<Map<String, Any>> ?: emptyList()
+            val timetables = rawList.map { ttMap ->
+                val id = ttMap["id"] as? String ?: java.util.UUID.randomUUID().toString()
+                val name = ttMap["name"] as? String ?: "Timetable"
+                val term = ttMap["term"] as? String ?: "Winter 2026"
+                val rawCourses = ttMap["courses"] as? List<Map<String, Any>> ?: emptyList()
+                Timetable(id = id, name = name, term = term, courses = rawCourses.map { mapToCourse(it) })
+            }
+            val activeId = doc.getString("activeTimetableId")?.takeIf { it.isNotBlank() }
+            Pair(timetables, activeId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading all timetables", e)
+            Pair(emptyList(), null)
+        }
+    }
+
     suspend fun saveUserSchedule(courses: List<Course>) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         Log.d(TAG, "Saving ${courses.size} courses for user $userId")
 
         try {
             val data = mapOf("scheduledCourses" to courses.map { courseToMap(it) })
-            db.collection("users").document(userId).set(data).await()
+            // Merge to avoid wiping newer fields like timetables/activeTimetableId.
+            db.collection("users").document(userId)
+                .set(data, com.google.firebase.firestore.SetOptions.merge())
+                .await()
         } catch (e: Exception) {
             Log.e(TAG, "Error saving user schedule", e)
         }
@@ -201,16 +283,16 @@ object CourseRepository {
     suspend fun saveGenerateState(term: String, wishlist: Map<String, List<Course>>, generatedSchedules: List<List<Course>>) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         Log.d(TAG, "Saving assistant state for user $userId term $term. Wishlist size: ${wishlist.size}, Schedules: ${generatedSchedules.size}")
-        
+
         try {
             val wishlistData = wishlist.mapValues { (_, courses) -> courses.map { courseToMap(it) } }
-            
+
             // Firestore DOES NOT support nested arrays (List of Lists).
             // We must wrap the inner list in a Map to store it successfully.
-            val schedulesData = generatedSchedules.map { schedule -> 
-                mapOf("courses" to schedule.map { courseToMap(it) }) 
+            val schedulesData = generatedSchedules.map { schedule ->
+                mapOf("courses" to schedule.map { courseToMap(it) })
             }
-            
+
             val data = mapOf(
                 "wishlist" to wishlistData,
                 "generatedSchedules" to schedulesData
@@ -224,21 +306,21 @@ object CourseRepository {
 
     suspend fun loadGenerateState(term: String): Pair<Map<String, List<Course>>, List<List<Course>>> {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return Pair(emptyMap(), emptyList())
-        
+
         return try {
             val doc = db.collection("users").document(userId).collection("assistant").document(term).get().await()
             if (!doc.exists()) return Pair(emptyMap(), emptyList())
-            
+
             val rawWishlist = doc.get("wishlist") as? Map<String, List<Map<String, Any>>> ?: emptyMap()
             val wishlist = rawWishlist.mapValues { (_, courses) -> courses.map { mapToCourse(it) } }
-            
+
             // Unwrap the Map back into a List of Lists
             val rawSchedules = doc.get("generatedSchedules") as? List<Map<String, Any>> ?: emptyList()
-            val generatedSchedules = rawSchedules.map { scheduleMap -> 
+            val generatedSchedules = rawSchedules.map { scheduleMap ->
                 val coursesList = scheduleMap["courses"] as? List<Map<String, Any>> ?: emptyList()
                 coursesList.map { mapToCourse(it) }
             }
-            
+
             Pair(wishlist, generatedSchedules)
         } catch (e: Exception) {
             Log.e(TAG, "Error loading assistant state", e)
@@ -251,46 +333,46 @@ object TimeParser {
     // TTh -> Tue, Thu
     // MWF -> Mon, Wed, Fri
     // 10:00-11:20MW
-    
+
     fun parse(timeStr: String): Triple<Time, Time, List<String>>? {
         if (timeStr.isBlank()) return null
-        
+
         // Regex for HH:MM-HH:MM
         // e.g. 08:30-09:20MWF
         val timeRegex = Regex("""(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})""")
         val match = timeRegex.find(timeStr) ?: return null
-        
+
         val (h1, m1, h2, m2) = match.destructured
-        
+
         var startH = h1.toInt()
         val startM = m1.toInt()
         var endH = h2.toInt()
         val endM = m2.toInt()
-        
+
         // Waterloo classes are between 8:30 AM and 9:50 PM.
         // If the hour is less than 8, it must be PM (e.g., 4:00 -> 16:00).
         if (startH < 8) startH += 12
         if (endH < 8) endH += 12
-        
+
         // If the end hour is still less than the start hour, it must be PM.
         // (e.g., 6:30 PM to 9:20 PM -> startH=18, endH=9 -> endH becomes 21)
         if (endH < startH) endH += 12
-        
+
         val start = Time(startH, startM)
         val end = Time(endH, endM)
-        
+
         // Extract rest of string as days
         // The string might have dates at the end, e.g. "02:30-03:20MWF05/05-07/30"
         // We only want the letters immediately following the time.
         val daysPart = timeStr.substring(match.range.last + 1).trim()
-        
+
         // Extract just the letters (M, T, W, Th, F) before any numbers (dates)
         val daysLetters = daysPart.takeWhile { it.isLetter() }
         val days = parseDays(daysLetters)
-        
+
         return Triple(start, end, days)
     }
-    
+
     private fun parseDays(s: String): List<String> {
         val days = mutableListOf<String>()
         var i = 0
@@ -300,7 +382,7 @@ object TimeParser {
                 'T' -> {
                     if (i + 1 < s.length && s[i+1] == 'h') {
                         days.add("Thu")
-                        i++ 
+                        i++
                     } else {
                         days.add("Tue")
                     }

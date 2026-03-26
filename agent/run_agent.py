@@ -1,7 +1,7 @@
 import os
 import json
 from agent import Agent # Adjust import path as needed
-from tools import read_uploaded_file, browse_online, query_database_readonly, add_course_to_timetable, delete_course_from_timetable, clear_timetable, TOOLS_SCHEMA
+from tools import read_uploaded_file, browse_online, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
 
 def main():
     """
@@ -69,6 +69,8 @@ def main():
                         tool_response = browse_online(**args)
                     elif func_name == "query_database_readonly":
                         tool_response = query_database_readonly(**args)
+                    elif func_name == "create_timetable":
+                        tool_response = create_timetable(**args)
                     elif func_name == "add_course_to_timetable":
                         tool_response = add_course_to_timetable(**args)
                     elif func_name == "delete_course_from_timetable":

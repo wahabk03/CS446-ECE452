@@ -8,15 +8,43 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 
 object AgentApi {
     private const val BASE_URL = "http://10.0.2.2:5000/chat"
     private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
+    private const val READ_TIMEOUT_MS = 120000
+    private const val CONNECT_TIMEOUT_MS = 30000
+    private const val MAX_RETRIES = 2
 
     data class AgentResponse(val response: String, val showButton: Boolean)
+
+    private suspend fun <T> withRetry(block: () -> T): T {
+        var attempt = 0
+        var lastException: Exception? = null
+
+        while (attempt <= MAX_RETRIES) {
+            try {
+                return block()
+            } catch (e: SocketTimeoutException) {
+                lastException = e
+            } catch (e: IOException) {
+                lastException = e
+            }
+
+            attempt++
+            if (attempt <= MAX_RETRIES) {
+                // Short linear backoff to avoid immediate reconnect on transient server/socket drops.
+                kotlinx.coroutines.delay(500L * attempt)
+            }
+        }
+
+        throw (lastException ?: IOException("Request failed after retries"))
+    }
 
     suspend fun sendMessage(
         context: Context,
@@ -57,27 +85,36 @@ object AgentApi {
                 }
             }
 
-            val url = URL(BASE_URL)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
+            return@withContext withRetry {
+                val url = URL(BASE_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                try {
+                    connection.readTimeout = READ_TIMEOUT_MS
+                    connection.connectTimeout = CONNECT_TIMEOUT_MS
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("Connection", "close")
+                    connection.doOutput = true
 
-            val writer = OutputStreamWriter(connection.outputStream)
-            writer.write(jsonBody.toString())
-            writer.flush()
-            writer.close()
+                    val writer = OutputStreamWriter(connection.outputStream)
+                    writer.write(jsonBody.toString())
+                    writer.flush()
+                    writer.close()
 
-            val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
-                val jsonObj = JSONObject(responseStr)
-                val responseText = jsonObj.optString("response", "No response")
-                val showButton = jsonObj.optBoolean("show_button", false)
-                return@withContext AgentResponse(responseText, showButton)
-            } else {
-                val err = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
-                return@withContext AgentResponse("Error ($responseCode): $err", false)
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
+                        val jsonObj = JSONObject(responseStr)
+                        val responseText = jsonObj.optString("response", "No response")
+                        val showButton = jsonObj.optBoolean("show_button", false)
+                        AgentResponse(responseText, showButton)
+                    } else {
+                        val err = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                        AgentResponse("Error ($responseCode): $err", false)
+                    }
+                } finally {
+                    connection.disconnect()
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -90,22 +127,33 @@ object AgentApi {
             val jsonBody = JSONObject().apply {
                 put("message", message)
             }
-            val url = URL(SUMMARIZE_URL)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
+            return@withContext withRetry {
+                val url = URL(SUMMARIZE_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                try {
+                    connection.readTimeout = READ_TIMEOUT_MS
+                    connection.connectTimeout = CONNECT_TIMEOUT_MS
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("Connection", "close")
+                    connection.doOutput = true
 
-            val writer = OutputStreamWriter(connection.outputStream)
-            writer.write(jsonBody.toString())
-            writer.flush()
-            writer.close()
+                    val writer = OutputStreamWriter(connection.outputStream)
+                    writer.write(jsonBody.toString())
+                    writer.flush()
+                    writer.close()
 
-            val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
-                val jsonObj = JSONObject(responseStr)
-                return@withContext jsonObj.optString("summary", "Chat Session")
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
+                        val jsonObj = JSONObject(responseStr)
+                        jsonObj.optString("summary", "Chat Session")
+                    } else {
+                        "Chat Session"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()

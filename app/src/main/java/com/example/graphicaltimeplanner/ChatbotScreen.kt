@@ -24,7 +24,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.TextButton
 
 data class ChatMessage(val role: String = "", val content: String = "", val attachedFileName: String? = null)
 
@@ -61,7 +66,16 @@ private fun Uri.getFileName(context: android.content.Context): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateToTimetable: () -> Unit = {}) {
+fun ChatbotScreen(
+    onLogout: () -> Unit = {},
+    onViewProfile: () -> Unit = {},
+    onNavigateToHome: () -> Unit = {},
+    onNavigateToCourses: () -> Unit = {},
+    onNavigateToAi: () -> Unit = {},
+    onNavigateToAdvisor: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
+    onNavigateToTimetable: () -> Unit = {}
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var inputValue by remember { mutableStateOf("") }
@@ -69,6 +83,7 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
     var attachedFileName by remember { mutableStateOf<String?>(null) }
     var isWaitingForAgent by remember { mutableStateOf(false) }
     var showRedirectButton by remember { mutableStateOf(false) }
+    var redirectButtonCountdownProgress by remember { mutableFloatStateOf(1f) }
     
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -82,6 +97,26 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
     var messages by remember { mutableStateOf(emptyList<ChatMessage>()) }
     var sessionId by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(showRedirectButton) {
+        if (!showRedirectButton) {
+            redirectButtonCountdownProgress = 1f
+            return@LaunchedEffect
+        }
+
+        val totalDurationMs = 10_000L
+        val stepMs = 50L
+        val startTime = System.currentTimeMillis()
+
+        while (showRedirectButton) {
+            val elapsed = System.currentTimeMillis() - startTime
+            val remaining = (totalDurationMs - elapsed).coerceAtLeast(0L)
+            redirectButtonCountdownProgress = remaining.toFloat() / totalDurationMs.toFloat()
+
+            if (remaining <= 0L) break
+            delay(stepMs)
+        }
+    }
+
     LaunchedEffect(ChatStateManager.activeSession?.id) {
         val session = ChatStateManager.activeSession
         if (session != null) {
@@ -93,45 +128,121 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorResource(R.color.uw_gold_lvl4).copy(alpha = 0.1f))
-    ) {
-        // Top Decorative Banner
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .background(colorResource(R.color.uw_gold_lvl4))
-        )
+    
+    val primaryYellow = Color(0xFFFFD700)
+    val lightYellow = primaryYellow.copy(alpha = 0.25f)
+    val lightBackground = Color(0xFFFDFDFD)
 
-        // Header Section
+    val displayName by AppState.displayName
+    val nameInitial = displayName.firstOrNull()?.uppercaseChar()?.toString()
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = lightBackground,
+        bottomBar = {
+            BottomNavBar(
+                selectedItem = BottomNavItem.CHATBOT,
+                onCoursesClick = onNavigateToCourses,
+                onAiClick = onNavigateToAi,
+                onScheduleClick = onNavigateToHome,
+                onChatbotClick = {},
+                onAdvisorClick = onNavigateToAdvisor
+            )
+        }
+    ) { innerPadding ->
+Column(
+        modifier = Modifier
+            .fillMaxSize().padding(innerPadding)
+            .background(Color.White)
+    ) {
+        // Chatbot Header Section
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Agent",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onViewProfile() }
+                    .padding(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(primaryYellow),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (nameInitial != null) {
+                        Text(nameInitial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    } else {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(displayName.ifBlank { "User" }, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    Text("View Profile", fontSize = 13.sp, color = Color.Gray)
+                }
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onHistoryClick, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.List, contentDescription = "Chat History", tint = Color.DarkGray)
+                TextButton(onClick = onLogout) {
+                    Text(
+                        text = "Logout",
+                        color = Color.Gray,
+                        fontSize = 15.sp
+                    )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+            }
+        }
+
+        // AI Status Section
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE0F2F1)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Back", color = Color.White)
+                    Text(
+                        text = "AI",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00695C)
+                    )
                 }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Text(
+                        text = "AI Assistant",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Always here to help",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+            
+            IconButton(onClick = onHistoryClick) {
+                Icon(Icons.Default.List, contentDescription = "History", tint = Color.Gray)
             }
         }
 
@@ -147,11 +258,11 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
             ) {
                 Text(
                     text = "How can I help you today?",
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(32.dp),
                     textAlign = TextAlign.Center,
-                    color = colorResource(R.color.uw_gold_lvl4),
+                    color = Color.DarkGray,
                     lineHeight = 36.sp
                 )
             }
@@ -165,74 +276,7 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
                 reverseLayout = true
             ) {
             items(messages.reversed()) { msg ->
-                if (msg.role == "user") {
-                    // User Message (Boxed, right-aligned)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            if (msg.attachedFileName != null) {
-                                Row(
-                                    modifier = Modifier
-                                        .padding(bottom = 4.dp)
-                                        .background(Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Attachment", modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = msg.attachedFileName, fontSize = 12.sp, color = Color.DarkGray)
-                                }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        color = colorResource(R.color.uw_gold_lvl4),
-                                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                                    .widthIn(max = 280.dp)
-                            ) {
-                                Text(
-                                    text = msg.content,
-                                    color = Color.Black,
-                                    fontSize = 15.sp
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    // Agent Message (Unboxed, spanning width, plain layout)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Assistant",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = Color.DarkGray,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                            if (msg.content == "typing...") {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorResource(R.color.uw_gold_lvl4), strokeWidth = 2.dp)
-                            } else {
-                                Text(
-                                    text = msg.content,
-                                    color = Color.Black,
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-                }
+                ChatBubble(message = msg, primaryYellow = primaryYellow)
             }
         }
         }
@@ -261,57 +305,65 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
 
         // Action popup button
         if (showRedirectButton) {
-            val goldColor = colorResource(R.color.uw_gold_lvl4)
-            var progress by remember { mutableFloatStateOf(1f) }
-            
-            LaunchedEffect(Unit) {
-                val duration = 5000L
-                val startTime = System.currentTimeMillis()
-                while (true) {
-                    val elapsed = System.currentTimeMillis() - startTime
-                    if (elapsed > duration) {
-                        progress = 0f
-                        break
-                    }
-                    progress = 1f - elapsed.toFloat() / duration
-                    delay(16L)
-                }
-            }
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .drawBehind {
-                        val strokeWidthPx = 3.dp.toPx()
-                        val cornerRadiusPx = 24.dp.toPx() // typical Button roundness
-                        val path = Path().apply {
-                            addRoundRect(
-                                RoundRect(
-                                    left = strokeWidthPx / 2,
-                                    top = strokeWidthPx / 2,
-                                    right = size.width - strokeWidthPx / 2,
-                                    bottom = size.height - strokeWidthPx / 2,
-                                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
-                                )
-                            )
-                        }
-                        val pm = PathMeasure()
-                        pm.setPath(path, false)
-                        val segment = Path()
-                        pm.getSegment(0f, pm.length * progress, segment, true)
-                        drawPath(segment, color = goldColor, style = Stroke(strokeWidthPx))
-                    }
             ) {
                 Button(
                     onClick = {
                         showRedirectButton = false
                         onNavigateToTimetable()
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .drawWithContent {
+                            drawContent()
+                            val progress = redirectButtonCountdownProgress.coerceIn(0f, 1f)
+                            if (progress <= 0f) return@drawWithContent
+
+                            val strokeWidth = 3.dp.toPx()
+                            val corner = 24.dp.toPx()
+                            val inset = strokeWidth / 2f
+
+                            val roundedRectPath = Path().apply {
+                                addRoundRect(
+                                    RoundRect(
+                                        left = inset,
+                                        top = inset,
+                                        right = size.width - inset,
+                                        bottom = size.height - inset,
+                                        cornerRadius = CornerRadius(corner, corner)
+                                    )
+                                )
+                            }
+
+                            val pathMeasure = PathMeasure().apply {
+                                setPath(roundedRectPath, false)
+                            }
+
+                            val segmentPath = Path()
+                            val segmentStop = pathMeasure.length * progress
+                            pathMeasure.getSegment(0f, segmentStop, segmentPath, true)
+
+                            drawPath(
+                                path = segmentPath,
+                                color = Color(0xFF26A69A),
+                                style = Stroke(width = strokeWidth)
+                            )
+                        },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE0F2F1),
+                        contentColor = Color(0xFF00695C)
+                    ),
+                    shape = RoundedCornerShape(24.dp)
                 ) {
-                    Text("View Timetable Change", color = goldColor, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "View Timetable Change",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
                 }
             }
         }
@@ -401,7 +453,7 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
                                 // Trigger redirect button if the AI called show_timetable_button tool
                                 if (agentResponse.showButton) {
                                     showRedirectButton = true
-                                    delay(5000L) // Show for 5 seconds
+                                    delay(10000L) // Show for 10 seconds
                                     showRedirectButton = false
                                 }
                             }
@@ -414,6 +466,78 @@ fun AgentScreen(onBack: () -> Unit, onHistoryClick: () -> Unit = {}, onNavigateT
                         contentDescription = "Send Message",
                         tint = if ((inputValue.isNotBlank() || attachedFileUri != null) && !isWaitingForAgent) colorResource(R.color.uw_gold_lvl4) else Color.Gray
                     )
+                }
+            }
+        }
+    }
+}
+    }
+
+@Composable
+fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
+    val isAI = message.role == "assistant" || message.role == "agent"
+    val isTyping = message.content == "typing..."
+    val bubbleColor = if (isAI) Color.Transparent else primaryYellow.copy(alpha = 0.2f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalAlignment = if (isAI) Alignment.Start else Alignment.End
+    ) {
+        if (message.attachedFileName != null) {
+            Row(
+                modifier = Modifier
+                    .padding(bottom = 4.dp)
+                    .background(Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Attachment", modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = message.attachedFileName, fontSize = 12.sp, color = Color.DarkGray)
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = if (isAI) Arrangement.Start else Arrangement.End
+        ) {
+            if (isTyping) {
+                Box(
+                    modifier = Modifier.padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = primaryYellow, strokeWidth = 2.dp)
+                }
+            } else if (isAI) {
+                Box(modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp)) {
+                    Text(
+                        text = message.content,
+                        fontSize = 15.sp,
+                        color = Color.Black
+                    )
+                }
+            } else {
+                Card(
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 4.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd = 16.dp
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = bubbleColor),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = message.content,
+                            fontSize = 15.sp,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }

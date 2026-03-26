@@ -1,0 +1,562 @@
+// ProfileScreen.kt
+package com.example.graphicaltimeplanner
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+
+@Composable
+fun ProfileScreen(
+    onBack: () -> Unit,
+    onLogout: () -> Unit = {}
+) {
+    val primaryYellow = Color(0xFFFFD700)
+    val lightBackground = Color(0xFFF5F5F5)
+    val cardBackground = Color(0xFFFFFFFF)
+    val sectionTitleColor = Color(0xFF1A1A1A)
+    val labelColor = Color(0xFF444444)
+    val fieldBackground = Color(0xFFF0F0F0)
+
+    val auth = remember { FirebaseAuth.getInstance() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // ── Profile section state ─────────────────────────────────────────────────
+    val displayName by AppState.displayName
+    var username by remember(displayName) { mutableStateOf(displayName) }
+    var nameSuccess by remember { mutableStateOf<String?>(null) }
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var nameLoading by remember { mutableStateOf(false) }
+    val email = auth.currentUser?.email ?: ""
+    val nameInitial = displayName.firstOrNull()?.uppercaseChar()?.toString()
+
+    // ── Password section state ────────────────────────────────────────────────
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var currentPasswordVisible by remember { mutableStateOf(false) }
+    var newPasswordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var passwordSuccess by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var passwordLoading by remember { mutableStateOf(false) }
+
+    // ── Notifications state ───────────────────────────────────────────────────
+    var notifLectureChanges by remember { mutableStateOf(true) }
+    var notifNewSections by remember { mutableStateOf(true) }
+    var notifConflicts by remember { mutableStateOf(true) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(lightBackground)
+            .statusBarsPadding()
+    ) {
+        // ── Top header bar (matches other screens) ────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onBack() }
+                    .padding(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(primaryYellow),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (nameInitial != null) {
+                        Text(nameInitial, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    } else {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(displayName.ifBlank { "User" }, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text("Return", fontSize = 13.sp, color = Color.Gray)
+                }
+            }
+            TextButton(onClick = onLogout) {
+                Text("Logout", color = Color.Gray, fontSize = 14.sp)
+            }
+        }
+
+        // ── Scrollable body ───────────────────────────────────────────────────
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 20.dp)
+        ) {
+
+            // Page title
+            Text(
+                text = "User Profile",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = sectionTitleColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Manage your account settings and preferences",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 1. Profile Information ────────────────────────────────────────
+            SectionHeader(icon = Icons.Default.Person, title = "Profile Information")
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    FieldLabel("Username")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = {
+                            username = it
+                            nameSuccess = null
+                            nameError = null
+                        },
+                        placeholder = { Text("Your name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !nameLoading,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = fieldBackground,
+                            focusedContainerColor = fieldBackground,
+                            focusedBorderColor = primaryYellow,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    FieldLabel("Email")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = false,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledContainerColor = fieldBackground,
+                            disabledBorderColor = Color.Transparent,
+                            disabledTextColor = Color(0xFF444444)
+                        )
+                    )
+
+                    nameError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                    nameSuccess?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = Color(0xFF2E7D32), fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            val trimmed = username.trim()
+                            if (trimmed.isBlank()) {
+                                nameError = "Name cannot be empty"
+                                return@Button
+                            }
+                            nameLoading = true
+                            nameError = null
+                            nameSuccess = null
+                            coroutineScope.launch {
+                                try {
+                                    val profileUpdates = UserProfileChangeRequest.Builder()
+                                        .setDisplayName(trimmed)
+                                        .build()
+                                    auth.currentUser?.updateProfile(profileUpdates)?.await()
+                                    CourseRepository.saveUserProfile(trimmed)
+                                    AppState.displayName.value = trimmed
+                                    nameSuccess = "Profile updated successfully!"
+                                } catch (e: Exception) {
+                                    nameError = e.localizedMessage ?: "Failed to update profile"
+                                } finally {
+                                    nameLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryYellow,
+                            contentColor = Color.Black
+                        ),
+                        enabled = !nameLoading
+                    ) {
+                        if (nameLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
+                        } else {
+                            Text("Update Profile", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 2. Change Password ────────────────────────────────────────────
+            SectionHeader(icon = Icons.Default.Lock, title = "Change Password")
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    FieldLabel("Current Password")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    PasswordField(
+                        value = currentPassword,
+                        onValueChange = { currentPassword = it; passwordError = null; passwordSuccess = null },
+                        placeholder = "Enter current password",
+                        visible = currentPasswordVisible,
+                        onToggleVisible = { currentPasswordVisible = !currentPasswordVisible },
+                        enabled = !passwordLoading,
+                        primaryYellow = primaryYellow,
+                        fieldBackground = fieldBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    FieldLabel("New Password")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    PasswordField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it; passwordError = null; passwordSuccess = null },
+                        placeholder = "Enter new password",
+                        visible = newPasswordVisible,
+                        onToggleVisible = { newPasswordVisible = !newPasswordVisible },
+                        enabled = !passwordLoading,
+                        primaryYellow = primaryYellow,
+                        fieldBackground = fieldBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    FieldLabel("Confirm New Password")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    PasswordField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it; passwordError = null; passwordSuccess = null },
+                        placeholder = "Confirm new password",
+                        visible = confirmPasswordVisible,
+                        onToggleVisible = { confirmPasswordVisible = !confirmPasswordVisible },
+                        enabled = !passwordLoading,
+                        primaryYellow = primaryYellow,
+                        fieldBackground = fieldBackground
+                    )
+
+                    passwordError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                    passwordSuccess?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = Color(0xFF2E7D32), fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (currentPassword.isBlank() || newPassword.isBlank() || confirmPassword.isBlank()) {
+                                passwordError = "Please fill in all password fields"
+                                return@Button
+                            }
+                            if (newPassword.length < 6) {
+                                passwordError = "New password must be at least 6 characters"
+                                return@Button
+                            }
+                            if (newPassword != confirmPassword) {
+                                passwordError = "New passwords do not match"
+                                return@Button
+                            }
+                            passwordLoading = true
+                            passwordError = null
+                            passwordSuccess = null
+                            coroutineScope.launch {
+                                try {
+                                    val user = auth.currentUser ?: throw Exception("Not signed in")
+                                    val userEmail = user.email ?: throw Exception("No email on account")
+                                    val credential = EmailAuthProvider.getCredential(userEmail, currentPassword)
+                                    user.reauthenticate(credential).await()
+                                    user.updatePassword(newPassword).await()
+                                    currentPassword = ""
+                                    newPassword = ""
+                                    confirmPassword = ""
+                                    passwordSuccess = "Password changed successfully!"
+                                } catch (e: Exception) {
+                                    passwordError = when {
+                                        e.message?.contains("credential") == true ||
+                                                e.message?.contains("password is invalid") == true ->
+                                            "Current password is incorrect"
+                                        else -> e.localizedMessage ?: "Failed to change password"
+                                    }
+                                } finally {
+                                    passwordLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryYellow,
+                            contentColor = Color.Black
+                        ),
+                        enabled = !passwordLoading
+                    ) {
+                        if (passwordLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
+                        } else {
+                            Text("Change Password", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 3. Notifications ──────────────────────────────────────────────
+            SectionHeader(icon = Icons.Default.Notifications, title = "Notifications")
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column {
+                    NotificationToggleRow(
+                        title = "Lecture Time Changes",
+                        description = "Get notified when class times are updated",
+                        checked = notifLectureChanges,
+                        onCheckedChange = { notifLectureChanges = it },
+                        primaryYellow = primaryYellow,
+                        showDivider = true
+                    )
+                    NotificationToggleRow(
+                        title = "New Sections Available",
+                        description = "Be alerted when new course sections open",
+                        checked = notifNewSections,
+                        onCheckedChange = { notifNewSections = it },
+                        primaryYellow = primaryYellow,
+                        showDivider = true
+                    )
+                    NotificationToggleRow(
+                        title = "Schedule Conflicts",
+                        description = "Immediate alerts when conflicts are detected",
+                        checked = notifConflicts,
+                        onCheckedChange = { notifConflicts = it },
+                        primaryYellow = primaryYellow,
+                        showDivider = false
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 4. About ──────────────────────────────────────────────────────
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("About", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = sectionTitleColor)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Version 1.0.0", fontSize = 14.sp, color = Color.Gray)
+                    Text("Graphical Time Planner", fontSize = 14.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        Text("For technical support, contact ", fontSize = 14.sp, color = Color.Gray)
+                        Text(
+                            "d4yim@uwaterloo.ca",
+                            fontSize = 14.sp,
+                            color = primaryYellow,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+// ── Reusable helpers ──────────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(icon: ImageVector, title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF333333),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1A1A1A)
+        )
+    }
+}
+
+@Composable
+private fun FieldLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color(0xFF333333)
+    )
+}
+
+@Composable
+private fun PasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    visible: Boolean,
+    onToggleVisible: () -> Unit,
+    enabled: Boolean,
+    primaryYellow: Color,
+    fieldBackground: Color
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text(placeholder, color = Color.LightGray) },
+        trailingIcon = {
+            TextButton(onClick = onToggleVisible) {
+                Text(if (visible) "Hide" else "Show", color = Color.Gray, fontSize = 13.sp)
+            }
+        },
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        enabled = enabled,
+        shape = RoundedCornerShape(8.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = fieldBackground,
+            focusedContainerColor = fieldBackground,
+            focusedBorderColor = primaryYellow,
+            unfocusedBorderColor = Color.Transparent,
+            cursorColor = primaryYellow
+        )
+    )
+}
+
+@Composable
+private fun NotificationToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    primaryYellow: Color,
+    showDivider: Boolean
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A1A1A))
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(description, fontSize = 13.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = primaryYellow,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color.LightGray
+                )
+            )
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = Color(0xFFEEEEEE),
+                thickness = 1.dp
+            )
+        }
+    }
+}
