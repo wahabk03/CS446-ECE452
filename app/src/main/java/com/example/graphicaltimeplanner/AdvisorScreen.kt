@@ -44,11 +44,13 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,21 +89,36 @@ data class GeneratedEmail(
     val body: String
 )
 
-private fun buildEmailFromTemplate(issue: String): GeneratedEmail {
+private fun buildEmailFromTemplate(issue: String, userName: String): GeneratedEmail {
+    val name = userName.ifBlank { "[Your Name]" }
+
+    // Build schedule summary from AppState
+    val scheduleSummary = buildString {
+        val courses = AppState.scheduledCourses
+        if (courses.isNotEmpty()) {
+            appendLine()
+            appendLine("For reference, my current schedule includes:")
+            val grouped = courses.groupBy { it.code }
+            for ((code, sections) in grouped.toSortedMap()) {
+                val title = sections.first().title
+                appendLine("  - $code ($title)")
+            }
+        }
+    }
+
     val body = """Dear Academic Advisor,
 
 I hope this email finds you well. I am writing to seek your guidance regarding an academic matter.
 
 $issue
-
+$scheduleSummary
 I would greatly appreciate your assistance and advice on how to proceed with this situation. Please let me know if you need any additional information from me.
 I am available for a meeting at your convenience, either in person or virtually.
 
 Thank you for your time and support.
 
 Best regards,
-[Your Name]
-[Student ID]"""
+$name"""
     return GeneratedEmail(
         subject = "Request for Academic Advising Assistance",
         body = body
@@ -137,6 +154,26 @@ fun AdvisorScreen(
     var editToEmail by remember { mutableStateOf("advisor@uwaterloo.ca") }
     var editSubject by remember { mutableStateOf("") }
     var editBody by remember { mutableStateOf("") }
+
+    // Load advisor email from Firestore based on user's program
+    LaunchedEffect(Unit) {
+        val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+        if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
+
+        // Load advisors and user profile to auto-fill the "To" email
+        CourseRepository.getAdvisors()
+        val profile = CourseRepository.getUserExtendedProfile()
+        val programSlug = profile["program"] as? String
+        val faculty = profile["faculty"] as? String
+        val yearLevel = profile["yearLevel"] as? Int
+        if (programSlug != null && faculty != null) {
+            val isFirstYear = (yearLevel ?: 1) <= 1
+            val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
+            if (advisor != null) {
+                editToEmail = advisor.email
+            }
+        }
+    }
 
     // URL opener
     fun openUrl(url: String) {
@@ -228,13 +265,10 @@ fun AdvisorScreen(
                     Button(
                         onClick = {
                             if (issueText.isNotBlank()) {
-                                val result = buildEmailFromTemplate(issueText)
+                                val result = buildEmailFromTemplate(issueText, displayName)
                                 generatedEmail = result
                                 editSubject = result.subject
                                 editBody = result.body
-                                // Pre-fill from email with the signed-in user's email
-                                val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
-                                if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
                                 showComposeDialog = false
                                 issueText = ""
                                 showResultDialog = true
