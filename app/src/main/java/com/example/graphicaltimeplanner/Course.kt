@@ -37,3 +37,19 @@ data class Course(
     val term: String,   // e.g. "1261"
     val units: String   // e.g. "0.5"
 )
+
+data class Program(
+    val slug: String,        // document ID, e.g. "computer-science"
+    val name: String,        // e.g. "Computer Science"
+    val faculty: String,     // e.g. "Mathematics"
+    val degreeType: String   // e.g. "BCS"
+)
+
+data class Advisor(
+    val programSlug: String,  // matches program slug or faculty key
+    val email: String,
+    val name: String,
+    val yearLevel: String,    // "first-year", "upper-year", or "all"
+    val isFallback: Boolean = false,
+    val faculty: String = ""  // only set on fallback entries
+)
