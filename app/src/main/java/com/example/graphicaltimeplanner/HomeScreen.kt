@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -267,6 +268,26 @@ fun HomeScreen(
     // Export dialog state
     var showExportSheet by remember { mutableStateOf(false) }
 
+    // One-time program selection prompt
+    var showProgramPrompt by remember { mutableStateOf(false) }
+    var promptPrograms by remember { mutableStateOf<List<Program>>(emptyList()) }
+    var promptSearchQuery by remember { mutableStateOf("") }
+    var promptSelectedProgram by remember { mutableStateOf<Program?>(null) }
+    var promptSelectedYear by remember { mutableStateOf("") }
+    val promptYearLevels = listOf("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B")
+    var promptSaving by remember { mutableStateOf(false) }
+    var promptDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Check if user has set their program, show prompt if not
+    LaunchedEffect(Unit) {
+        val profile = CourseRepository.getUserExtendedProfile()
+        val programSlug = profile["program"] as? String
+        if (programSlug.isNullOrBlank()) {
+            promptPrograms = CourseRepository.getPrograms()
+            showProgramPrompt = true
+        }
+    }
+
     // Timetable dropdown state
     var showTimetableDropdown by remember { mutableStateOf(false) }
     var showAddTimetableDialog by remember { mutableStateOf(false) }
@@ -302,7 +323,7 @@ fun HomeScreen(
             AppState.scheduledCourses.clear()
             AppState.scheduledCourses.addAll(activeCourses)
         } else {
-            // First ever login — create a default timetable
+            // First ever login, create a default timetable
             val defaultId = java.util.UUID.randomUUID().toString()
             val saved = CourseRepository.loadUserSchedule()
             val defaultTimetable = Timetable(id = defaultId, name = "My Timetable", courses = saved)
@@ -323,7 +344,7 @@ fun HomeScreen(
         CourseRepository.saveAllTimetables(AppState.timetables.toList(), id)
     }
 
-    // Export dialog (stable API — no experimental ModalBottomSheet)
+    // Export dialog
     if (showExportSheet) {
         AlertDialog(
             onDismissRequest = { showExportSheet = false },
@@ -407,6 +428,167 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = { showExportSheet = false }) {
                     Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
+
+    // ── Program selection prompt (one-time on first login) ─────────────────
+    if (showProgramPrompt) {
+        AlertDialog(
+            onDismissRequest = { /* don't dismiss on outside tap */ },
+            title = {
+                Text("Welcome! Choose Your Program", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        "Select your program and year level so we can connect you with the right academic advisor.",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Program search
+                    OutlinedTextField(
+                        value = promptSearchQuery,
+                        onValueChange = {
+                            promptSearchQuery = it
+                            promptDropdownExpanded = true
+                        },
+                        placeholder = {
+                            Text(
+                                promptSelectedProgram?.name ?: "Search program...",
+                                color = if (promptSelectedProgram != null) Color(0xFF444444) else Color.Gray,
+                                fontSize = 14.sp
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { if (it.isFocused) promptDropdownExpanded = true },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = primaryYellow,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    // Results
+                    if (promptDropdownExpanded && promptPrograms.isNotEmpty()) {
+                        val filtered = if (promptSearchQuery.isBlank()) {
+                            promptPrograms.take(6)
+                        } else {
+                            promptPrograms.filter {
+                                it.name.contains(promptSearchQuery, ignoreCase = true)
+                            }.take(6)
+                        }
+                        if (filtered.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    filtered.forEach { program ->
+                                        Text(
+                                            "${program.name} (${program.faculty})",
+                                            fontSize = 13.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    promptSelectedProgram = program
+                                                    promptSearchQuery = ""
+                                                    promptDropdownExpanded = false
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (promptSelectedProgram != null && !promptDropdownExpanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Selected: ${promptSelectedProgram!!.name}",
+                            fontSize = 13.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Year Level", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Year chips in a flow row
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        promptYearLevels.forEach { year ->
+                            val sel = promptSelectedYear == year
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (sel) primaryYellow else Color(0xFFF0F0F0))
+                                    .clickable { promptSelectedYear = year }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    year,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (sel) Color.Black else Color(0xFF666666)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (promptSelectedProgram != null) {
+                            promptSaving = true
+                            coroutineScope.launch {
+                                val yearNum = if (promptSelectedYear.isNotBlank())
+                                    promptSelectedYear.first().digitToInt() else 1
+                                CourseRepository.saveUserExtendedProfile(
+                                    mapOf(
+                                        "program" to promptSelectedProgram!!.slug,
+                                        "faculty" to promptSelectedProgram!!.faculty,
+                                        "yearLevel" to yearNum,
+                                        "yearLevelLabel" to promptSelectedYear
+                                    )
+                                )
+                                CourseRepository.getAdvisors()
+                                promptSaving = false
+                                showProgramPrompt = false
+                            }
+                        }
+                    },
+                    enabled = promptSelectedProgram != null && !promptSaving,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryYellow,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showProgramPrompt = false }) {
+                    Text("Skip for now", color = Color.Gray)
                 }
             }
         )
@@ -647,7 +829,7 @@ fun HomeScreen(
                                         AppState.scheduledCourses.addAll(next.courses)
                                         CourseRepository.saveAllTimetables(AppState.timetables.toList(), next.id)
                                     } else {
-                                        // No timetables left — create a fresh default
+                                        // No timetables left, create a fresh default
                                         val newId = java.util.UUID.randomUUID().toString()
                                         val defaultTt = Timetable(id = newId, name = "My Timetable", courses = emptyList())
                                         AppState.timetables.add(defaultTt)
