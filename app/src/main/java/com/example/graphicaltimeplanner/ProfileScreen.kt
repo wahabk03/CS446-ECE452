@@ -4,13 +4,16 @@ package com.example.graphicaltimeplanner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -68,10 +71,54 @@ fun ProfileScreen(
     var passwordError by remember { mutableStateOf<String?>(null) }
     var passwordLoading by remember { mutableStateOf(false) }
 
+    // ── Program & Year Level state ─────────────────────────────────────────────
+    var programs by remember { mutableStateOf<List<Program>>(emptyList()) }
+    var selectedProgram by remember { mutableStateOf<Program?>(null) }
+    var programSearchQuery by remember { mutableStateOf("") }
+    var programDropdownExpanded by remember { mutableStateOf(false) }
+    val yearLevels = listOf("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B")
+    var selectedYearLevel by remember { mutableStateOf("") }
+    var yearDropdownExpanded by remember { mutableStateOf(false) }
+    var programSaving by remember { mutableStateOf(false) }
+    var programSuccess by remember { mutableStateOf<String?>(null) }
+    var programError by remember { mutableStateOf<String?>(null) }
+
     // ── Notifications state ───────────────────────────────────────────────────
     var notifLectureChanges by remember { mutableStateOf(true) }
     var notifNewSections by remember { mutableStateOf(true) }
     var notifConflicts by remember { mutableStateOf(true) }
+
+    // Load saved preferences from Firestore
+    LaunchedEffect(Unit) {
+        programs = CourseRepository.getPrograms()
+        CourseRepository.getAdvisors()
+        val profile = CourseRepository.getUserExtendedProfile()
+        profile["notifLectureChanges"]?.let { notifLectureChanges = it as Boolean }
+        profile["notifNewSections"]?.let { notifNewSections = it as Boolean }
+        profile["notifConflicts"]?.let { notifConflicts = it as Boolean }
+        val programSlug = profile["program"] as? String
+        if (programSlug != null) {
+            selectedProgram = programs.find { it.slug == programSlug }
+        }
+        val yearLevel = profile["yearLevel"] as? Int
+        val yearLabel = profile["yearLevelLabel"] as? String
+        if (yearLabel != null) {
+            selectedYearLevel = yearLabel
+        } else if (yearLevel != null) {
+            selectedYearLevel = yearLevels.getOrElse((yearLevel - 1) * 2) { "" }
+        }
+    }
+
+    // Save notification preferences whenever they change
+    LaunchedEffect(notifLectureChanges, notifNewSections, notifConflicts) {
+        CourseRepository.saveUserExtendedProfile(
+            mapOf(
+                "notifLectureChanges" to notifLectureChanges,
+                "notifNewSections" to notifNewSections,
+                "notifConflicts" to notifConflicts
+            )
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -254,7 +301,235 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── 2. Change Password ────────────────────────────────────────────
+            // ── 2. Program & Advisor ────────────────────────────────────────
+            SectionHeader(icon = Icons.Default.Info, title = "Program & Advisor")
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    FieldLabel("Program (${programs.size} loaded)")
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Program search field
+                    OutlinedTextField(
+                        value = programSearchQuery,
+                        onValueChange = {
+                            programSearchQuery = it
+                            programDropdownExpanded = true
+                            programSuccess = null
+                        },
+                        placeholder = {
+                            Text(
+                                selectedProgram?.name ?: "Type to search programs...",
+                                color = if (selectedProgram != null) Color(0xFF444444) else Color.LightGray
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    programDropdownExpanded = true
+                                }
+                            },
+                        singleLine = true,
+                        enabled = !programSaving,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = fieldBackground,
+                            focusedContainerColor = fieldBackground,
+                            focusedBorderColor = primaryYellow,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    // Program results list — shows when focused, filters as you type
+                    if (programDropdownExpanded && programs.isNotEmpty()) {
+                        val filtered = if (programSearchQuery.isBlank()) {
+                            programs.take(10)
+                        } else {
+                            programs.filter {
+                                it.name.contains(programSearchQuery, ignoreCase = true)
+                            }.take(8)
+                        }
+                        if (filtered.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(4.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                            ) {
+                                Column(
+                                    modifier = Modifier.verticalScroll(rememberScrollState())
+                                ) {
+                                    filtered.forEach { program ->
+                                        Text(
+                                            "${program.name} (${program.faculty})",
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    selectedProgram = program
+                                                    programSearchQuery = ""
+                                                    programDropdownExpanded = false
+                                                    programSuccess = null
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (programSearchQuery.isNotBlank()) {
+                            Text(
+                                "No programs found for \"$programSearchQuery\"",
+                                fontSize = 13.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Show selected program
+                    if (selectedProgram != null && !programDropdownExpanded) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Selected: ${selectedProgram!!.name} (${selectedProgram!!.faculty})",
+                            fontSize = 13.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    FieldLabel("Year Level")
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Year level as clickable chips
+                    androidx.compose.foundation.layout.FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        yearLevels.forEach { year ->
+                            val isSelected = selectedYearLevel == year
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isSelected) primaryYellow else fieldBackground
+                                    )
+                                    .clickable {
+                                        selectedYearLevel = year
+                                        programSuccess = null
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    year,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color.Black else Color(0xFF666666)
+                                )
+                            }
+                        }
+                    }
+
+                    // Show advisor info if program + year selected
+                    if (selectedProgram != null && selectedYearLevel.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val isFirstYear = selectedYearLevel.startsWith("1")
+                        val advisor = CourseRepository.getAdvisorForProgram(
+                            selectedProgram!!.slug, isFirstYear, selectedProgram!!.faculty
+                        )
+                        if (advisor != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(primaryYellow.copy(alpha = 0.12f))
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text("Your Academic Advisor", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(advisor.name, fontSize = 13.sp, color = Color(0xFF444444))
+                                    Text(advisor.email, fontSize = 13.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+
+                    programError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                    programSuccess?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = Color(0xFF2E7D32), fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (selectedProgram == null) {
+                                programError = "Please select a program"
+                                return@Button
+                            }
+                            programSaving = true
+                            programError = null
+                            programSuccess = null
+                            coroutineScope.launch {
+                                try {
+                                    val yearNum = if (selectedYearLevel.isNotBlank())
+                                        selectedYearLevel.first().digitToInt() else 1
+                                    CourseRepository.saveUserExtendedProfile(
+                                        mapOf(
+                                            "program" to selectedProgram!!.slug,
+                                            "faculty" to selectedProgram!!.faculty,
+                                            "yearLevel" to yearNum,
+                                            "yearLevelLabel" to selectedYearLevel
+                                        )
+                                    )
+                                    programSuccess = "Program saved!"
+                                } catch (e: Exception) {
+                                    programError = e.localizedMessage ?: "Failed to save"
+                                } finally {
+                                    programSaving = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryYellow,
+                            contentColor = Color.Black
+                        ),
+                        enabled = !programSaving
+                    ) {
+                        if (programSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
+                        } else {
+                            Text("Save Program", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 3. Change Password ────────────────────────────────────────────
             SectionHeader(icon = Icons.Default.Lock, title = "Change Password")
             Spacer(modifier = Modifier.height(10.dp))
 
