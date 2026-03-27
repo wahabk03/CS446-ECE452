@@ -76,6 +76,7 @@ data class CourseWishItem(
 // ─── AIScreen ─────────────────────────────────────────────────────────────────
 
 @Composable
+
 fun AIScreen(
     onViewProfile: () -> Unit = {},
     onLogout: () -> Unit = {},
@@ -213,7 +214,9 @@ fun AIScreen(
                 }.filter { it.value.isNotEmpty() }
 
                 // Simple conflict-free schedule generation
-                val courseList = filteredWishlist.values.map { it }
+                val courseList = filteredWishlist.values
+                    .map { it }
+                    .sortedBy { it.size }
                 val results = mutableListOf<List<Course>>()
 
                 fun hasConflict(schedule: List<Course>, candidate: Course): Boolean {
@@ -261,8 +264,14 @@ fun AIScreen(
                     return false
                 }
 
+                var searchCount = 0
+                val maxSearchCount = 5000
+
                 fun generate(idx: Int, current: List<Course>) {
                     if (results.size >= 5) return
+
+                    if (searchCount >= maxSearchCount) return
+                    searchCount++
 
                     if (idx == courseList.size) {
                         if (current.isNotEmpty() && scheduleWithinDailyHours(current)) {
