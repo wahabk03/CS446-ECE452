@@ -297,7 +297,7 @@ fun HomeScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var newTimetableName by remember { mutableStateOf("") }
-    var newTimetableTerm by remember { mutableStateOf("Winter 2026") }
+    var newTimetableTerm by remember { mutableStateOf("1261") }
     var hasLoadedTimetables by remember { mutableStateOf(false) }
 
     val timetables = AppState.timetables
@@ -329,12 +329,11 @@ fun HomeScreen(
         } else {
             // First ever login — create a default timetable
             val defaultId = java.util.UUID.randomUUID().toString()
-            val saved = CourseRepository.loadUserSchedule()
-            val defaultTimetable = Timetable(id = defaultId, name = "My Timetable", term = "Winter 2026", courses = saved)
+            val defaultTimetable = Timetable(id = defaultId, name = "My Timetable", term = "1261", courses = emptyList())
             AppState.timetables.add(defaultTimetable)
             AppState.activeTimetableId.value = defaultId
             AppState.scheduledCourses.clear()
-            AppState.scheduledCourses.addAll(saved)
+            AppState.scheduledCourses.addAll(defaultTimetable.courses)
         }
         hasLoadedTimetables = true
     }
@@ -671,6 +670,9 @@ fun HomeScreen(
             ) {
                 // Left: Dropdown with border + "+" with border
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val activeTimetable = timetables.find { it.id == activeTimetableId }
+                    val activeTimetableHasConflict = activeTimetable?.let { hasTimeConflict(it.courses) } == true
+
                     Box {
                         Row(
                             modifier = Modifier
@@ -681,11 +683,21 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = timetables.find { it.id == activeTimetableId }?.name ?: "My Timetable",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = activeTimetable?.name ?: "My Timetable",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (activeTimetableHasConflict) {
+                                    Text(
+                                        text = " !",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFE53935)
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.width(6.dp))
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
@@ -700,13 +712,24 @@ fun HomeScreen(
                             modifier = Modifier.background(Color.White)
                         ) {
                             timetables.forEach { tt ->
+                                val timetableHasConflict = hasTimeConflict(tt.courses)
                                 DropdownMenuItem(
                                     text = {
-                                        Text(
-                                            tt.name,
-                                            fontWeight = if (tt.id == activeTimetableId) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (tt.id == activeTimetableId) primaryYellow else Color.Black
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                tt.name,
+                                                fontWeight = if (tt.id == activeTimetableId) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (tt.id == activeTimetableId) primaryYellow else Color.Black
+                                            )
+                                            if (timetableHasConflict) {
+                                                Text(
+                                                    text = " !",
+                                                    color = Color(0xFFE53935),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
+                                        }
                                     },
                                     onClick = {
                                         showTimetableDropdown = false
@@ -837,7 +860,7 @@ fun HomeScreen(
                                     } else {
                                         // No timetables left — create a fresh default
                                         val newId = java.util.UUID.randomUUID().toString()
-                                        val defaultTt = Timetable(id = newId, name = "My Timetable", term = "Winter 2026", courses = emptyList())
+                                        val defaultTt = Timetable(id = newId, name = "My Timetable", term = "1261", courses = emptyList())
                                         AppState.timetables.add(defaultTt)
                                         AppState.activeTimetableId.value = newId
                                         AppState.scheduledCourses.clear()
@@ -860,7 +883,7 @@ fun HomeScreen(
             // Add Timetable dialog
             if (showAddTimetableDialog) {
                 AlertDialog(
-                    onDismissRequest = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "Winter 2026" },
+                    onDismissRequest = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "1261" },
                     shape = RoundedCornerShape(16.dp),
                     containerColor = Color.White,
                     title = { Text("New Timetable", fontWeight = FontWeight.Bold) },
@@ -882,21 +905,25 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             Text("Select Term:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(8.dp))
-                            val terms = listOf("Winter 2026", "Fall 2025", "Spring 2025")
-                            terms.forEach { term ->
+                            val terms = listOf(
+                                "1261" to "Winter 2026",
+                                "1259" to "Fall 2025",
+                                "1255" to "Spring 2025"
+                            )
+                            terms.forEach { (termCode, termLabel) ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { newTimetableTerm = term }
+                                        .clickable { newTimetableTerm = termCode }
                                         .padding(vertical = 4.dp)
                                 ) {
                                     RadioButton(
-                                        selected = (newTimetableTerm == term),
-                                        onClick = { newTimetableTerm = term },
+                                        selected = (newTimetableTerm == termCode),
+                                        onClick = { newTimetableTerm = termCode },
                                         colors = RadioButtonDefaults.colors(selectedColor = primaryYellow)
                                     )
-                                    Text(text = term, modifier = Modifier.padding(start = 8.dp))
+                                    Text(text = termLabel, modifier = Modifier.padding(start = 8.dp))
                                 }
                             }
                         }
@@ -915,14 +942,14 @@ fun HomeScreen(
                                 }
                                 showAddTimetableDialog = false
                                 newTimetableName = ""
-                                newTimetableTerm = "Winter 2026"
+                                newTimetableTerm = "1261"
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = primaryYellow, contentColor = Color.Black),
                             shape = RoundedCornerShape(10.dp)
                         ) { Text("Create", fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "Winter 2026" }) {
+                        TextButton(onClick = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "1261" }) {
                             Text("Cancel", color = Color.Gray)
                         }
                     }
@@ -980,8 +1007,20 @@ fun HomeScreen(
                         courseColors = courseColors,
                         onRemoveCourse = { courseToRemove ->
                             coroutineScope.launch {
-                                AppState.scheduledCourses.remove(courseToRemove)
-                                CourseRepository.saveUserSchedule(AppState.scheduledCourses)
+                                AppState.scheduledCourses.removeAll { it.code == courseToRemove.code }
+                                val id = AppState.activeTimetableId.value
+                                if (id != null) {
+                                    val idx = AppState.timetables.indexOfFirst { it.id == id }
+                                    if (idx >= 0) {
+                                        AppState.timetables[idx] = AppState.timetables[idx].copy(
+                                            courses = AppState.scheduledCourses.toList()
+                                        )
+                                    }
+                                }
+                                CourseRepository.saveAllTimetables(
+                                    AppState.timetables.toList(),
+                                    AppState.activeTimetableId.value
+                                )
                             }
                         }
                     )
@@ -989,6 +1028,68 @@ fun HomeScreen(
             }
         }
     }
+}
+
+private data class ConflictSpan(
+    val dayIndex: Int,
+    val startHourFloat: Float,
+    val endHourFloat: Float
+)
+
+private fun findConflictSpans(courses: List<Course>, days: List<String>): List<ConflictSpan> {
+    val spans = mutableListOf<ConflictSpan>()
+
+    days.forEachIndexed { dayIndex, day ->
+        val meetings = courses
+            .filter { it.section.days.contains(day) }
+            .map {
+                Triple(
+                    it.section.startTime.toFloat(),
+                    it.section.endTime.toFloat(),
+                    it.code
+                )
+            }
+            .sortedBy { it.first }
+
+        for (i in meetings.indices) {
+            for (j in i + 1 until meetings.size) {
+                val a = meetings[i]
+                val b = meetings[j]
+                val overlapStart = maxOf(a.first, b.first)
+                val overlapEnd = minOf(a.second, b.second)
+                if (overlapEnd > overlapStart) {
+                    spans.add(
+                        ConflictSpan(
+                            dayIndex = dayIndex,
+                            startHourFloat = overlapStart,
+                            endHourFloat = overlapEnd
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    return spans
+}
+
+private fun hasTimeConflict(courses: List<Course>): Boolean {
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+    days.forEach { day ->
+        val meetings = courses
+            .filter { it.section.days.contains(day) }
+            .map { it.section.startTime.toFloat() to it.section.endTime.toFloat() }
+            .sortedBy { it.first }
+
+        for (i in meetings.indices) {
+            for (j in i + 1 until meetings.size) {
+                val overlapStart = maxOf(meetings[i].first, meetings[j].first)
+                val overlapEnd = minOf(meetings[i].second, meetings[j].second)
+                if (overlapEnd > overlapStart) return true
+            }
+        }
+    }
+    return false
 }
 
 @Composable
@@ -1002,7 +1103,9 @@ fun TimetableView(
     val endHour = 23
     val hourHeight = 60.dp
     val primaryYellow = Color(0xFFFFD700)
+    val conflictRed = Color(0xFFE53935)
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
+    val conflictSpans = remember(courses) { findConflictSpans(courses, days) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1093,6 +1196,21 @@ fun TimetableView(
                                     }
                                 }
                             }
+                        }
+
+                        // Draw conflict overlays on top so they remain visible.
+                        conflictSpans.forEach { span ->
+                            val topOffset = ((span.startHourFloat - startHour) * hourHeight.value).dp
+                            val blockHeight = ((span.endHourFloat - span.startHourFloat) * hourHeight.value).dp
+
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = columnWidth * span.dayIndex + (columnWidth * 0.04f), y = topOffset)
+                                    .width(columnWidth * 0.92f)
+                                    .height(blockHeight)
+                                    .border(2.dp, conflictRed, RoundedCornerShape(10.dp))
+                                    .background(conflictRed.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                            )
                         }
                     }
                 }

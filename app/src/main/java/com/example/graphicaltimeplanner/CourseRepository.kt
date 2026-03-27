@@ -13,7 +13,9 @@ object CourseRepository {
     private val db get() = FirebaseFirestore.getInstance()
     private var advisorsCache: List<Advisor> = emptyList()
 
-    // Comprehensive list of UWaterloo subjects
+    // Full list of UWaterloo subjects sourced from the "courses" collection in Firebase.
+    // Hardcoded to avoid a costly full-collection fetch on every screen load.
+    // Update this list if new subjects are added to the database.
     val ALL_SUBJECTS = listOf(
         "ACC", "ACTSC", "AFM", "AMATH", "ANTH", "APPLS", "ARBUS", "ARCH",
         "BIOL", "BME", "BUS",
@@ -33,12 +35,29 @@ object CourseRepository {
         "WS"
     )
 
+    /**
+     * Fetch the list of subjects from the "programs" collection in Firestore.
+     * Each document is expected to have a "degreeType" field (String) which
+     * is used as the subject chip label (e.g. "CS", "MATH", "ECE").
+     * Falls back to ALL_SUBJECTS if the fetch fails or returns nothing.
+     */
     // Term mappings
     val TERM_MAPPINGS = listOf(
         "1261" to "Winter 2026",
         "1259" to "Fall 2025",
         "1255" to "Spring 2025"
     )
+
+    private fun normalizeTermCode(raw: String?): String {
+        val term = raw?.trim().orEmpty()
+        if (term.isBlank()) return "1261"
+        return when (term) {
+            "Winter 2026" -> "1261"
+            "Fall 2025" -> "1259"
+            "Spring 2025" -> "1255"
+            else -> term
+        }
+    }
 
     /**
      * Fetch courses from Firestore for a given term and subject.
@@ -358,7 +377,7 @@ object CourseRepository {
             val timetables = rawList.map { ttMap ->
                 val id = ttMap["id"] as? String ?: java.util.UUID.randomUUID().toString()
                 val name = ttMap["name"] as? String ?: "Timetable"
-                val term = ttMap["term"] as? String ?: "Winter 2026"
+                val term = normalizeTermCode(ttMap["term"] as? String)
                 val rawCourses = ttMap["courses"] as? List<Map<String, Any>> ?: emptyList()
                 Timetable(id = id, name = name, term = term, courses = rawCourses.map { mapToCourse(it) })
             }
@@ -371,32 +390,33 @@ object CourseRepository {
     }
 
     suspend fun saveUserSchedule(courses: List<Course>) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        Log.d(TAG, "Saving ${courses.size} courses for user $userId")
+        val (timetables, activeId) = loadAllTimetables()
+        val resolvedActiveId = activeId ?: timetables.firstOrNull()?.id
 
-        try {
-            val data = mapOf("scheduledCourses" to courses.map { courseToMap(it) })
-            // Merge to avoid wiping newer fields like timetables/activeTimetableId.
-            db.collection("users").document(userId)
-                .set(data, com.google.firebase.firestore.SetOptions.merge())
-                .await()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving user schedule", e)
+        val updated = if (resolvedActiveId == null) {
+            listOf(Timetable(
+                id = java.util.UUID.randomUUID().toString(),
+                name = "My Timetable",
+                term = "1261",
+                courses = courses
+            ))
+        } else {
+            val mutable = timetables.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == resolvedActiveId }
+            if (idx >= 0) {
+                mutable[idx] = mutable[idx].copy(courses = courses)
+            }
+            mutable
         }
+
+        val newActiveId = resolvedActiveId ?: updated.first().id
+        saveAllTimetables(updated, newActiveId)
     }
 
     suspend fun loadUserSchedule(): List<Course> {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
-        Log.d(TAG, "Loading schedule for user $userId")
-
-        return try {
-            val doc = db.collection("users").document(userId).get().await()
-            val rawList = doc.get("scheduledCourses") as? List<Map<String, Any>> ?: emptyList()
-            rawList.map { mapToCourse(it) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading user schedule", e)
-            emptyList()
-        }
+        val (timetables, activeId) = loadAllTimetables()
+        val resolvedActiveId = activeId ?: timetables.firstOrNull()?.id
+        return timetables.firstOrNull { it.id == resolvedActiveId }?.courses ?: emptyList()
     }
 
     suspend fun saveGenerateState(term: String, wishlist: Map<String, List<Course>>, generatedSchedules: List<List<Course>>) {

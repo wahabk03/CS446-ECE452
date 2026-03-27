@@ -44,7 +44,7 @@ fun NavGraph(
         composable("home") {
             HomeScreen(
                 onNavigateToTimetable = { navController.navigate("home") },
-                onNavigateToAssistant = { navController.navigate("ai") },
+                onNavigateToAssistant = { navController.navigate("preference") },
                 onNavigateToCourses   = { navController.navigate("courses") },
                 onNavigateToChatbot   = { navController.navigate("chatbot") },
                 onViewProfile         = { navController.navigate("profile") },
@@ -56,15 +56,15 @@ fun NavGraph(
             )
         }
 
-        // New AI screen
-        composable("ai") {
+        // Preference screen
+        composable("preference") {
             AIScreen(
                 onViewProfile   = { navController.navigate("profile") },
                 onLogout = {
                     AppState.logout()
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 },
-                onNavigateToHome     = { navController.navigate("home") { popUpTo("ai") { inclusive = true } } },
+                onNavigateToHome     = { navController.navigate("home") { popUpTo("preference") { inclusive = true } } },
                 onNavigateToCourses  = { navController.navigate("courses") },
                 onNavigateToChatbot  = { navController.navigate("chatbot") },
                 onNavigateToAdvisor  = { navController.navigate("advisor") }
@@ -82,7 +82,7 @@ fun NavGraph(
                     navController.navigate("home") { popUpTo("courses") { inclusive = true } }
                 },
                 onNavigateToChatbot = { navController.navigate("chatbot") },
-                onNavigateToAi = { navController.navigate("ai") },
+                onNavigateToAi = { navController.navigate("preference") },
                 onNavigateToAdvisor = { navController.navigate("advisor") }
             )
         }
@@ -98,7 +98,7 @@ fun NavGraph(
                     navController.navigate("home") { popUpTo("chatbot") { inclusive = true } }
                 },
                 onNavigateToCourses = { navController.navigate("courses") },
-                onNavigateToAi = { navController.navigate("ai") },
+                onNavigateToAi = { navController.navigate("preference") },
                 onNavigateToAdvisor = { navController.navigate("advisor") }
             )
         }
@@ -123,7 +123,7 @@ fun NavGraph(
                 onNavigateToHome    = { navController.navigate("home") { popUpTo("advisor") { inclusive = true } } },
                 onNavigateToCourses = { navController.navigate("courses") },
                 onNavigateToChatbot = { navController.navigate("chatbot") },
-                onNavigateToAi      = { navController.navigate("ai") }
+                onNavigateToAi      = { navController.navigate("preference") }
             )
         }
     }
