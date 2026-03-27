@@ -56,20 +56,6 @@ fun NavGraph(
             )
         }
 
-        composable("timetable") {
-            PlannerScreen(onBack = { navController.popBackStack() })
-        }
-
-        // Legacy GenerateScreen kept in case it is still used elsewhere
-        composable("assistant") {
-            GenerateScreen(
-                onBack = { navController.popBackStack() },
-                onNavigateToTimetable = {
-                    navController.navigate("home") { popUpTo("home") }
-                }
-            )
-        }
-
         // New AI screen
         composable("ai") {
             AIScreen(
