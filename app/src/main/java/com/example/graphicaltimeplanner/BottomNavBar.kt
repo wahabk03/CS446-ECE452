@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 enum class BottomNavItem {
-    COURSES, AI, SCHEDULE, CHATBOT, ADVISOR
+    COURSES, PREFERENCE, SCHEDULE, CHATBOT, ADVISOR
 }
 
 @Composable
@@ -83,16 +83,16 @@ fun BottomNavBar(
             )
 
             NavigationBarItem(
-                selected = selectedItem == BottomNavItem.AI,
+                selected = selectedItem == BottomNavItem.PREFERENCE,
                 onClick = onAiClick,
                 icon = {
                     Icon(
-                        Icons.Default.Star, contentDescription = "AI",
-                        tint = if (selectedItem == BottomNavItem.AI) primaryYellow else Color.Gray,
+                        Icons.Default.Star, contentDescription = "PREFERENCE",
+                        tint = if (selectedItem == BottomNavItem.PREFERENCE) primaryYellow else Color.Gray,
                         modifier = Modifier.size(26.dp)
                     )
                 },
-                label = { Text("AI", color = if (selectedItem == BottomNavItem.AI) primaryYellow else Color.Gray, fontSize = 12.sp) },
+                label = { Text("Preference", color = if (selectedItem == BottomNavItem.PREFERENCE) primaryYellow else Color.Gray, fontSize = 12.sp) },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
             )
 

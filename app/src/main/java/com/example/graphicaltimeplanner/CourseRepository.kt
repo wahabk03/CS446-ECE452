@@ -12,7 +12,9 @@ object CourseRepository {
 
     private val db get() = FirebaseFirestore.getInstance()
 
-    // Comprehensive list of UWaterloo subjects
+    // Full list of UWaterloo subjects sourced from the "courses" collection in Firebase.
+    // Hardcoded to avoid a costly full-collection fetch on every screen load.
+    // Update this list if new subjects are added to the database.
     val ALL_SUBJECTS = listOf(
         "ACC", "ACTSC", "AFM", "AMATH", "ANTH", "APPLS", "ARBUS", "ARCH",
         "BIOL", "BME", "BUS",
@@ -32,6 +34,12 @@ object CourseRepository {
         "WS"
     )
 
+    /**
+     * Fetch the list of subjects from the "programs" collection in Firestore.
+     * Each document is expected to have a "degreeType" field (String) which
+     * is used as the subject chip label (e.g. "CS", "MATH", "ECE").
+     * Falls back to ALL_SUBJECTS if the fetch fails or returns nothing.
+     */
     // Term mappings
     val TERM_MAPPINGS = listOf(
         "1261" to "Winter 2026",
@@ -217,6 +225,7 @@ object CourseRepository {
                     mapOf(
                         "id" to tt.id,
                         "name" to tt.name,
+                        "term" to tt.term,
                         "courses" to tt.courses.map { courseToMap(it) }
                     )
                 },
@@ -238,8 +247,9 @@ object CourseRepository {
             val timetables = rawList.map { ttMap ->
                 val id = ttMap["id"] as? String ?: java.util.UUID.randomUUID().toString()
                 val name = ttMap["name"] as? String ?: "Timetable"
+                val term = ttMap["term"] as? String ?: ""
                 val rawCourses = ttMap["courses"] as? List<Map<String, Any>> ?: emptyList()
-                Timetable(id = id, name = name, courses = rawCourses.map { mapToCourse(it) })
+                Timetable(id = id, name = name, courses = rawCourses.map { mapToCourse(it) }, term = term)
             }
             val activeId = doc.getString("activeTimetableId")?.takeIf { it.isNotBlank() }
             Pair(timetables, activeId)
