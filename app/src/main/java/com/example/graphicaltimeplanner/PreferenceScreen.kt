@@ -199,21 +199,16 @@ fun AIScreen(
                 val filteredWishlist = wishlist.mapValues { (_, secs) ->
                     secs.filter { course ->
                         val start = course.section.startTime.toFloat()
-                        val end = course.section.endTime.toFloat()
-                        val duration = end - start
 
                         // Avoid early classes (before 9 AM)
                         val passEarly = !avoidEarlyClasses || start >= 9f
-
-                        // Max daily hours: approximate check on section length
-                        val passHours = duration <= maxDailyHours
 
                         // Cluster days filter
                         val preferredDays = clusterDays.filter { it.value }.keys
                         val passCluster = preferredDays.isEmpty() ||
                                 course.section.days.any { it in preferredDays }
 
-                        passEarly && passHours && passCluster
+                        passEarly && passCluster
                     }
                 }.filter { it.value.isNotEmpty() }
 
@@ -230,18 +225,58 @@ fun AIScreen(
                     }
                 }
 
+                fun sectionDuration(course: Course): Float {
+                    return course.section.endTime.toFloat() - course.section.startTime.toFloat()
+                }
+
+                fun scheduleWithinDailyHours(schedule: List<Course>): Boolean {
+                    val dailyHours = mutableMapOf<String, Float>()
+
+                    for (course in schedule) {
+                        val duration = sectionDuration(course)
+                        for (day in course.section.days) {
+                            dailyHours[day] = (dailyHours[day] ?: 0f) + duration
+                        }
+                    }
+
+                    return dailyHours.values.all { it <= maxDailyHours }
+                }
+
+                fun exceedsDailyHours(schedule: List<Course>, candidate: Course): Boolean {
+                    val dailyHours = mutableMapOf<String, Float>()
+
+                    for (course in schedule) {
+                        val duration = sectionDuration(course)
+                        for (day in course.section.days) {
+                            dailyHours[day] = (dailyHours[day] ?: 0f) + duration
+                        }
+                    }
+
+                    val candidateDuration = sectionDuration(candidate)
+                    for (day in candidate.section.days) {
+                        val newTotal = (dailyHours[day] ?: 0f) + candidateDuration
+                        if (newTotal > maxDailyHours) return true
+                    }
+
+                    return false
+                }
+
                 fun generate(idx: Int, current: List<Course>) {
                     if (results.size >= 5) return
+
                     if (idx == courseList.size) {
-                        if (current.isNotEmpty()) results.add(current)
+                        if (current.isNotEmpty() && scheduleWithinDailyHours(current)) {
+                            results.add(current)
+                        }
                         return
                     }
+
                     for (section in courseList[idx]) {
-                        if (!hasConflict(current, section)) {
+                        if (!hasConflict(current, section) && !exceedsDailyHours(current, section)) {
                             generate(idx + 1, current + section)
                         }
                     }
-                    // Also allow skipping this course
+
                     generate(idx + 1, current)
                 }
 
