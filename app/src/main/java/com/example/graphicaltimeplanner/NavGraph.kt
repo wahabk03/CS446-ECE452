@@ -89,8 +89,6 @@ fun NavGraph(
 
         composable("chatbot") {
             ChatbotScreen(
-                onHistoryClick = { navController.navigate("chat_history") },
-                onNavigateToTimetable = { navController.navigate("home") { popUpTo("home") } },
                 onLogout = {
                     AppState.logout()
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
@@ -115,13 +113,6 @@ fun NavGraph(
             )
         }
 
-        composable("chat_history") {
-            ChatHistoryScreen(
-                onBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
         composable("advisor") {
             AdvisorScreen(
                 onViewProfile      = { navController.navigate("profile") },

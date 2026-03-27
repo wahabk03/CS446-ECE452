@@ -11,6 +11,7 @@ private const val TAG = "CourseRepo"
 object CourseRepository {
 
     private val db get() = FirebaseFirestore.getInstance()
+    private var advisorsCache: List<Advisor> = emptyList()
 
     // Comprehensive list of UWaterloo subjects
     val ALL_SUBJECTS = listOf(
@@ -202,6 +203,124 @@ object CourseRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user profile", e)
             null
+        }
+    }
+
+    /** Merge arbitrary profile fields under users/{uid}. */
+    suspend fun saveUserExtendedProfile(fields: Map<String, Any>) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        try {
+            db.collection("users").document(userId)
+                .set(fields, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving extended profile", e)
+        }
+    }
+
+    /** Read all profile fields from users/{uid}. */
+    suspend fun getUserExtendedProfile(): Map<String, Any> {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyMap()
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            doc.data ?: emptyMap()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading extended profile", e)
+            emptyMap()
+        }
+    }
+
+    /** Load available academic programs from Firestore collection `programs`. */
+    suspend fun getPrograms(): List<Program> {
+        return try {
+            val snapshot = db.collection("programs").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                val name = doc.getString("name") ?: return@mapNotNull null
+                val faculty = doc.getString("faculty") ?: ""
+                val degreeType = doc.getString("degreeType")
+                    ?: doc.getString("degree_type")
+                    ?: ""
+                Program(
+                    slug = doc.id,
+                    name = name,
+                    faculty = faculty,
+                    degreeType = degreeType
+                )
+            }.sortedBy { it.name }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading programs", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Load advisor mappings from Firestore collection `advisors`.
+     * Expected fields: programSlug/program_slug, email, name, yearLevel/year_level, isFallback/is_fallback, faculty.
+     */
+    suspend fun getAdvisors(forceRefresh: Boolean = false): List<Advisor> {
+        if (advisorsCache.isNotEmpty() && !forceRefresh) return advisorsCache
+
+        advisorsCache = try {
+            val snapshot = db.collection("advisors").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                val programSlug = doc.getString("programSlug")
+                    ?: doc.getString("program_slug")
+                    ?: ""
+                val email = doc.getString("email") ?: return@mapNotNull null
+                val name = doc.getString("name") ?: "Academic Advisor"
+                val yearLevel = doc.getString("yearLevel")
+                    ?: doc.getString("year_level")
+                    ?: "all"
+                val isFallback = (doc.getBoolean("isFallback")
+                    ?: doc.getBoolean("is_fallback")
+                    ?: false)
+                val faculty = doc.getString("faculty") ?: ""
+
+                Advisor(
+                    programSlug = if (programSlug.isBlank()) doc.id else programSlug,
+                    email = email,
+                    name = name,
+                    yearLevel = yearLevel,
+                    isFallback = isFallback,
+                    faculty = faculty
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading advisors", e)
+            emptyList()
+        }
+
+        return advisorsCache
+    }
+
+    /** Resolve best advisor match for the user's program/year with faculty fallback. */
+    fun getAdvisorForProgram(programSlug: String, isFirstYear: Boolean, faculty: String): Advisor? {
+        val advisors = advisorsCache
+        if (advisors.isEmpty()) return null
+
+        val desiredYear = if (isFirstYear) "first-year" else "upper-year"
+
+        val exactByYear = advisors.firstOrNull {
+            !it.isFallback && it.programSlug.equals(programSlug, ignoreCase = true) &&
+                it.yearLevel.equals(desiredYear, ignoreCase = true)
+        }
+        if (exactByYear != null) return exactByYear
+
+        val exactAllYears = advisors.firstOrNull {
+            !it.isFallback && it.programSlug.equals(programSlug, ignoreCase = true) &&
+                it.yearLevel.equals("all", ignoreCase = true)
+        }
+        if (exactAllYears != null) return exactAllYears
+
+        val fallbackByYear = advisors.firstOrNull {
+            it.isFallback && it.faculty.equals(faculty, ignoreCase = true) &&
+                it.yearLevel.equals(desiredYear, ignoreCase = true)
+        }
+        if (fallbackByYear != null) return fallbackByYear
+
+        return advisors.firstOrNull {
+            it.isFallback && it.faculty.equals(faculty, ignoreCase = true) &&
+                it.yearLevel.equals("all", ignoreCase = true)
         }
     }
 
