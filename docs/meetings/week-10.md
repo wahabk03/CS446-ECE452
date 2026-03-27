@@ -1,5 +1,5 @@
-Project Week 8 Update
-Mar 2 - Mar 9
+Project Week 10 Update
+Mar 12 - Mar 18
 
 [All members] Fix bugs and add features, continue working on assigned goals.
 [Wahab] Connect with the email system to notify advisors & Authentication 
