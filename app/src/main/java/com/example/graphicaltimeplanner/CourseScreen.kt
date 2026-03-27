@@ -52,18 +52,43 @@ fun CourseScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf("CS") }
+    // Derive the term directly from the active timetable so CourseScreen
+    // always browses the same term that was chosen in HomeScreen.
+    // Use derivedStateOf so this re-derives whenever *either* activeTimetableId
+    // or the timetables list mutates — remember(activeTimetableId){} misses
+    // the case where timetables load after the first composition.
+    val activeTimetableId by AppState.activeTimetableId
+    val selectedTerm by remember {
+        derivedStateOf {
+            AppState.timetables.find { it.id == activeTimetableId }?.term
+                ?.takeIf { it.isNotBlank() } ?: "1261"
+        }
+    }
+    val selectedTermLabel by remember {
+        derivedStateOf {
+            CourseRepository.TERM_MAPPINGS
+                .find { it.first == selectedTerm }?.second ?: ""
+        }
+    }
 
     // Track expanded course codes
     val expandedCourses = remember { mutableStateSetOf<String>() }
 
-    // Reactive state from AppState
-    val scheduledCourses by rememberUpdatedState(AppState.scheduledCourses.toList())
+    // Observe the SnapshotStateList directly so Compose recomposes on every
+    // add / remove.  rememberUpdatedState(.toList()) only captures a snapshot
+    // at composition time and misses subsequent mutations.
+    val scheduledCourses = AppState.scheduledCourses
 
-    LaunchedEffect(selectedSubject) {
+    val scope = rememberCoroutineScope()
+
+    // Clear expanded state when the subject or term changes so stale cards
+    // don't stay open after a fresh load.
+    LaunchedEffect(selectedSubject, selectedTerm) {
+        expandedCourses.clear()
         isLoading = true
         errorMessage = null
         try {
-            courses = CourseRepository.getCourses(term = "1259", subject = selectedSubject)
+            courses = CourseRepository.getCourses(term = selectedTerm, subject = selectedSubject)
         } catch (e: Exception) {
             errorMessage = e.message ?: "Failed to load courses"
             courses = emptyList()
@@ -182,16 +207,47 @@ fun CourseScreen(
                 )
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Subject chips
+            // Active term badge — read-only, driven by the active timetable
+            if (selectedTermLabel.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Showing courses for:",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(primaryYellow, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = selectedTermLabel,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Subject chips — hardcoded from ALL_SUBJECTS, no network fetch needed
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(listOf("CS", "MATH", "PHYS", "CHEM", "ENG")) { subject ->
+                items(CourseRepository.ALL_SUBJECTS) { subject ->
                     FilterChip(
                         selected = selectedSubject == subject,
                         onClick = { selectedSubject = subject },
@@ -205,7 +261,7 @@ fun CourseScreen(
                         border = FilterChipDefaults.filterChipBorder(
                             borderColor = if (selectedSubject == subject) Color.Transparent else Color.LightGray,
                             enabled = true,
-                            selected = true
+                            selected = selectedSubject == subject
                         )
                     )
                 }
@@ -260,14 +316,32 @@ fun CourseScreen(
                                         code = group.code,
                                         title = group.title,
                                         section = section,
-                                        term = "1259",
+                                        term = selectedTerm,
                                         units = group.units
                                     )
-                                    if (!AppState.scheduledCourses.any {
-                                            it.code == newCourse.code &&
-                                                    it.section.classNumber == newCourse.section.classNumber
-                                        }) {
-                                        AppState.scheduledCourses.add(newCourse)
+                                    // Enforce one section per component type (LEC, TUT, LAB, etc.)
+                                    // within the same course: remove any existing section of the
+                                    // same type before adding the new one.
+                                    AppState.scheduledCourses.removeAll {
+                                        it.code == newCourse.code &&
+                                                it.section.componentType == newCourse.section.componentType
+                                    }
+                                    AppState.scheduledCourses.add(newCourse)
+                                    // Persist — keep add and remove paths consistent
+                                    scope.launch {
+                                        CourseRepository.saveUserSchedule(AppState.scheduledCourses)
+                                    }
+                                },
+                                onRemoveSection = { section ->
+                                    val toRemove = AppState.scheduledCourses.find {
+                                        it.code == group.code &&
+                                                it.section.classNumber == section.classNumber
+                                    }
+                                    if (toRemove != null) {
+                                        AppState.scheduledCourses.remove(toRemove)
+                                        scope.launch {
+                                            CourseRepository.saveUserSchedule(AppState.scheduledCourses)
+                                        }
                                     }
                                 }
                             )
@@ -292,16 +366,21 @@ fun ExpandableCourseGroup(
     scheduledCourses: List<Course>,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
-    onAddSection: (Section) -> Unit
+    onAddSection: (Section) -> Unit,
+    onRemoveSection: (Section) -> Unit   // caller owns remove + save
 ) {
     val primaryYellow = Color(0xFFFFD700)
-    val scope = rememberCoroutineScope()  // Local scope for this composable
 
-    val addedCount = group.sections.count { section ->
-        scheduledCourses.any {
-            it.code == group.code && it.section.classNumber == section.section.classNumber
+    // Which distinct component types (LEC, TUT, LAB …) of this course are scheduled
+    val addedTypes = group.sections
+        .filter { course ->
+            scheduledCourses.any {
+                it.code == group.code && it.section.classNumber == course.section.classNumber
+            }
         }
-    }
+        .map { it.section.componentType }
+        .distinct()
+        .sorted()
 
     Card(
         modifier = Modifier
@@ -337,14 +416,26 @@ fun ExpandableCourseGroup(
                     )
                 }
 
-                if (addedCount > 0) {
-                    Text(
-                        text = "$addedCount added",
-                        color = primaryYellow,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                if (addedTypes.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(end = 8.dp)
-                    )
+                    ) {
+                        addedTypes.forEach { type ->
+                            Box(
+                                modifier = Modifier
+                                    .background(primaryYellow, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = type,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Icon(
@@ -367,8 +458,15 @@ fun ExpandableCourseGroup(
 
                     group.sections.forEachIndexed { index, course ->
                         val section = course.section
+                        // This exact section is currently scheduled
                         val isAdded = scheduledCourses.any {
                             it.code == group.code && it.section.classNumber == section.classNumber
+                        }
+                        // A *different* section of the same component type is scheduled
+                        // (e.g. user already has LEC 001, now looking at LEC 002)
+                        val isConflicting = !isAdded && scheduledCourses.any {
+                            it.code == group.code &&
+                                    it.section.componentType == section.componentType
                         }
 
                         Row(
@@ -379,61 +477,73 @@ fun ExpandableCourseGroup(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // e.g. "LEC 001" — full component string
                                     Text(
                                         text = section.component,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 15.sp
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = section.componentType,
-                                        fontSize = 13.sp,
-                                        color = Color.Gray
-                                    )
                                 }
 
+                                // Show "TBA" for online/TBA sections that have no
+                                // parseable schedule (empty days + midnight times).
+                                val scheduleText = if (section.days.isEmpty()) {
+                                    "TBA"
+                                } else {
+                                    section.days.joinToString(", ") +
+                                            " ${section.startTime}-${section.endTime}"
+                                }
                                 Text(
-                                    text = section.days.joinToString(", ") + " " +
-                                            "${section.startTime}-${section.endTime}",
+                                    text = scheduleText,
                                     fontSize = 13.sp,
                                     color = Color(0xFF666666)
                                 )
                             }
 
-                            if (isAdded) {
-                                Button(
-                                    onClick = {
-                                        val toRemove = scheduledCourses.find {
-                                            it.code == group.code && it.section.classNumber == section.classNumber
-                                        }
-                                        if (toRemove != null) {
-                                            AppState.scheduledCourses.remove(toRemove)
-                                            scope.launch {
-                                                CourseRepository.saveUserSchedule(AppState.scheduledCourses)
-                                            }
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = primaryYellow.copy(alpha = 0.15f),
-                                        contentColor = primaryYellow
-                                    ),
-                                    shape = RoundedCornerShape(20.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                ) {
-                                    Text("✓ Added", fontSize = 14.sp)
+                            when {
+                                isAdded -> {
+                                    // Currently selected — tap to deselect
+                                    Button(
+                                        onClick = { onRemoveSection(section) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = primaryYellow.copy(alpha = 0.15f),
+                                            contentColor = primaryYellow
+                                        ),
+                                        shape = RoundedCornerShape(20.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("✓ Added", fontSize = 14.sp)
+                                    }
                                 }
-                            } else {
-                                Button(
-                                    onClick = { onAddSection(section) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.White,
-                                        contentColor = primaryYellow
-                                    ),
-                                    border = BorderStroke(1.dp, primaryYellow),
-                                    shape = RoundedCornerShape(20.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                ) {
-                                    Text("+ Add", fontSize = 14.sp)
+                                isConflicting -> {
+                                    // Different section of same type already chosen — offer swap
+                                    Button(
+                                        onClick = { onAddSection(section) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.White,
+                                            contentColor = Color(0xFFFF8C00)
+                                        ),
+                                        border = BorderStroke(1.dp, Color(0xFFFF8C00)),
+                                        shape = RoundedCornerShape(20.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("↔ Swap", fontSize = 14.sp)
+                                    }
+                                }
+                                else -> {
+                                    // Not added yet — plain add
+                                    Button(
+                                        onClick = { onAddSection(section) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.White,
+                                            contentColor = primaryYellow
+                                        ),
+                                        border = BorderStroke(1.dp, primaryYellow),
+                                        shape = RoundedCornerShape(20.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("+ Add", fontSize = 14.sp)
+                                    }
                                 }
                             }
                         }

@@ -1,11 +1,6 @@
-// AIScreen.kt
+// PreferenceScreen.kt
 package com.example.graphicaltimeplanner
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -28,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -42,7 +36,6 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -65,14 +58,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
-// ─── Data model for AI wishlist ───────────────────────────────────────────────
+// ─── Data model for Preferences wishlist ───────────────────────────────────────────────
 
 data class CourseWishItem(
     val code: String,
@@ -111,7 +103,6 @@ fun AIScreen(
     var courses         by remember { mutableStateOf(listOf<Course>()) }
     var isLoading       by remember { mutableStateOf(true) }
     val selectedCourseCodes = remember { mutableStateSetOf<String>() }
-    val expandedCodes   = remember { mutableStateSetOf<String>() }
 
     // ── Generate state ────────────────────────────────────────────────────────
     var isGenerating           by remember { mutableStateOf(false) }
@@ -121,10 +112,34 @@ fun AIScreen(
     var currentScheduleIndex   by remember { mutableStateOf(0) }
     var showScheduleDialog     by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedSubject) {
+    // Resolve which subject to fetch:
+    //  - If the search box is blank → use the selected tab (selectedSubject)
+    //  - If the search box has text → try to parse a subject prefix from it
+    //    (e.g. "CS 446" → "CS", "MATH 135" → "MATH").  If one is found, fetch
+    //    that subject regardless of which tab is active.  If no prefix matches,
+    //    fall back to the selected tab so the list is never empty.
+    //
+    // This means the search bar fully overrides the tab filter when the user
+    // explicitly types a subject — the tab is only a convenience for browsing.
+    val subjectFromQuery = remember(searchQuery) {
+        val q = searchQuery.trim().uppercase()
+        if (q.isEmpty()) null
+        else CourseRepository.ALL_SUBJECTS
+            .sortedByDescending { it.length }          // longest match wins
+            .firstOrNull { subj ->
+                q == subj ||
+                        q.startsWith("$subj ") ||
+                        q.startsWith("$subj	")
+            }
+    }
+
+    // The subject we actually fetch from Firestore.
+    val fetchSubject = if (!subjectFromQuery.isNullOrEmpty()) subjectFromQuery else selectedSubject
+
+    LaunchedEffect(fetchSubject) {
         isLoading = true
         try {
-            courses = CourseRepository.getCourses(term = "1259", subject = selectedSubject)
+            courses = CourseRepository.getCourses(term = "1259", subject = fetchSubject)
         } catch (_: Exception) {
             courses = emptyList()
         } finally {
@@ -148,8 +163,20 @@ fun AIScreen(
     val filteredGroups = remember(groupedCourses, searchQuery) {
         if (searchQuery.isBlank()) groupedCourses
         else {
-            val q = searchQuery.lowercase()
-            groupedCourses.filter { it.code.lowercase().contains(q) || it.title.lowercase().contains(q) }
+            val q = searchQuery.trim().lowercase()
+            // Strip any leading subject prefix from q so that "cs 446" or
+            // "CS 446" reduces to "446" for catalog-number matching.
+            val catalogQuery = q.substringAfter(" ").trim().ifEmpty { q }
+            groupedCourses.filter { group ->
+                val codeLower  = group.code.lowercase()
+                val titleLower = group.title.lowercase()
+                // The catalog number is the part after the subject prefix, e.g.
+                // "446" from "CS 446".
+                val catalogNumber = codeLower.substringAfter(" ").trim()
+                codeLower.contains(q) ||          // full code match "cs 446"
+                        titleLower.contains(q) ||      // title match
+                        catalogNumber.startsWith(catalogQuery) // "446" → "CS 446"
+            }
         }
     }
 
@@ -383,25 +410,24 @@ fun AIScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
         ) {
 
-            // ── AI Recommendations Title ───────────────────────────────────
+            // ── Preferences Recommendations Title ───────────────────────────────────
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = primaryYellow, modifier = Modifier.size(26.dp))
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = primaryYellow,
+                        modifier = Modifier.size(26.dp)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("AI Recommendations", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Scheduling Preferences", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Select courses and let AI generate an optimized timetable",
+                    "Select courses with preferences, and generate an optimized timetable",
                     fontSize = 14.sp, color = Color.Gray
                 )
                 Spacer(modifier = Modifier.height(20.dp))
-            }
-
-            // ── Scheduling Preferences ─────────────────────────────────────
-            item {
-                Text("Scheduling Preferences", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Avoid Early Classes
@@ -498,6 +524,31 @@ fun AIScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            // ── Generate Button ────────────────────────────────────────
+            item {
+                Button(
+                    onClick = { generateTimetable() },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = selectedCourseCodes.isNotEmpty() && !isGenerating,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryYellow,
+                        contentColor = Color.Black,
+                        disabledContainerColor = primaryYellow.copy(alpha = 0.5f),
+                        disabledContentColor = Color.Black.copy(alpha = 0.5f)
+                    )
+                ) {
+                    if (isGenerating) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
+                    } else {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generate Optimal Timetable", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             // ── Select Courses ─────────────────────────────────────────────
             item {
                 Text("Select Courses", fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -563,113 +614,56 @@ fun AIScreen(
                 }
             } else {
                 items(filteredGroups, key = { it.code }) { group ->
-                    val isExpanded = expandedCodes.contains(group.code)
                     val isSelected = selectedCourseCodes.contains(group.code)
                     val sectionCount = group.sections.size
 
                     Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable {
+                                if (isSelected) selectedCourseCodes.remove(group.code)
+                                else selectedCourseCodes.add(group.code)
+                            },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) Color(0xFFFFF9E6) else Color.White
                         ),
                         elevation = CardDefaults.cardElevation(1.dp)
                     ) {
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { if (isExpanded) expandedCodes.remove(group.code) else expandedCodes.add(group.code) }
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isSelected,
-                                    onCheckedChange = {
-                                        if (it) selectedCourseCodes.add(group.code)
-                                        else selectedCourseCodes.remove(group.code)
-                                    },
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = primaryYellow,
-                                        checkmarkColor = Color.Black,
-                                        uncheckedColor = Color.LightGray
-                                    )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = {
+                                    if (it) selectedCourseCodes.add(group.code)
+                                    else selectedCourseCodes.remove(group.code)
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = primaryYellow,
+                                    checkmarkColor = Color.Black,
+                                    uncheckedColor = Color.LightGray
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("${group.code} - ${group.title}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Text("${group.units} units • $sectionCount sections available", fontSize = 12.sp, color = Color.Gray)
-                                }
-                                Icon(
-                                    Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = Color.LightGray,
-                                    modifier = Modifier.size(18.dp).rotate(if (isExpanded) 180f else 0f)
-                                )
-                            }
-
-                            AnimatedVisibility(
-                                visible = isExpanded,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                                    HorizontalDivider(color = Color(0xFFEEEEEE))
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    group.sections.forEach { sec ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(sec.component, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                                                Text(
-                                                    "${sec.days.joinToString(",")} ${sec.startTime}–${sec.endTime}",
-                                                    fontSize = 12.sp, color = Color.Gray
-                                                )
-                                                Text(sec.location, fontSize = 12.sp, color = Color.Gray)
-                                            }
-                                        }
-                                    }
-                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${group.code} - ${group.title}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text("${group.units} units • $sectionCount sections available", fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                     }
                 }
             }
 
-            // ── Generate Button ────────────────────────────────────────────
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { generateTimetable() },
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = selectedCourseCodes.isNotEmpty() && !isGenerating,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = primaryYellow,
-                        contentColor = Color.Black,
-                        disabledContainerColor = primaryYellow.copy(alpha = 0.5f),
-                        disabledContentColor = Color.Black.copy(alpha = 0.5f)
-                    )
-                ) {
-                    if (isGenerating) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
-                    } else {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Generate Optimal Timetable", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
         }
 
         // Bottom nav
         BottomNavBar(
-            selectedItem = BottomNavItem.AI,
+            selectedItem = BottomNavItem.PREFERENCE,
             onCoursesClick = onNavigateToCourses,
             onAiClick = {},
             onScheduleClick = onNavigateToHome,
