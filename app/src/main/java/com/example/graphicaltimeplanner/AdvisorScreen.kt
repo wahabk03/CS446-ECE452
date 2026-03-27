@@ -30,12 +30,14 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -50,7 +52,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -89,36 +91,21 @@ data class GeneratedEmail(
     val body: String
 )
 
-private fun buildEmailFromTemplate(issue: String, userName: String): GeneratedEmail {
-    val name = userName.ifBlank { "[Your Name]" }
-
-    // Build schedule summary from AppState
-    val scheduleSummary = buildString {
-        val courses = AppState.scheduledCourses
-        if (courses.isNotEmpty()) {
-            appendLine()
-            appendLine("For reference, my current schedule includes:")
-            val grouped = courses.groupBy { it.code }
-            for ((code, sections) in grouped.toSortedMap()) {
-                val title = sections.first().title
-                appendLine("  - $code ($title)")
-            }
-        }
-    }
-
+private fun buildEmailFromTemplate(issue: String): GeneratedEmail {
     val body = """Dear Academic Advisor,
 
 I hope this email finds you well. I am writing to seek your guidance regarding an academic matter.
 
 $issue
-$scheduleSummary
+
 I would greatly appreciate your assistance and advice on how to proceed with this situation. Please let me know if you need any additional information from me.
 I am available for a meeting at your convenience, either in person or virtually.
 
 Thank you for your time and support.
 
 Best regards,
-$name"""
+[Your Name]
+[Student ID]"""
     return GeneratedEmail(
         subject = "Request for Academic Advising Assistance",
         body = body
@@ -155,24 +142,55 @@ fun AdvisorScreen(
     var editSubject by remember { mutableStateOf("") }
     var editBody by remember { mutableStateOf("") }
 
-    // Load advisor email from Firestore based on user's program
+    // Dynamic advisor context
+    var profileProgram by remember { mutableStateOf<Program?>(null) }
+    var profileYearLabel by remember { mutableStateOf("") }
+    var matchedAdvisor by remember { mutableStateOf<Advisor?>(null) }
+    var advisorLoading by remember { mutableStateOf(true) }
+    var advisorError by remember { mutableStateOf<String?>(null) }
+
+    suspend fun refreshAdvisorContext(forceRefresh: Boolean = false) {
+        advisorLoading = true
+        advisorError = null
+        try {
+            val programs = CourseRepository.getPrograms()
+            CourseRepository.getAdvisors(forceRefresh = forceRefresh)
+            val profile = CourseRepository.getUserExtendedProfile()
+
+            val programSlug = profile["program"] as? String
+            profileProgram = programs.find { it.slug == programSlug }
+
+            val yearLabel = profile["yearLevelLabel"] as? String
+            val yearNumber = (profile["yearLevel"] as? Number)?.toInt()
+            profileYearLabel = when {
+                !yearLabel.isNullOrBlank() -> yearLabel
+                yearNumber != null && yearNumber in 1..4 -> "${yearNumber}A"
+                else -> ""
+            }
+
+            val isFirstYear = profileYearLabel.startsWith("1") || yearNumber == 1
+            matchedAdvisor = profileProgram?.let {
+                CourseRepository.getAdvisorForProgram(
+                    programSlug = it.slug,
+                    isFirstYear = isFirstYear,
+                    faculty = it.faculty
+                )
+            }
+
+            if (matchedAdvisor != null) {
+                editToEmail = matchedAdvisor!!.email
+            }
+        } catch (e: Exception) {
+            advisorError = e.localizedMessage ?: "Failed to load advisor information"
+        } finally {
+            advisorLoading = false
+        }
+    }
+
     LaunchedEffect(Unit) {
         val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
         if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
-
-        // Load advisors and user profile to auto-fill the "To" email
-        CourseRepository.getAdvisors()
-        val profile = CourseRepository.getUserExtendedProfile()
-        val programSlug = profile["program"] as? String
-        val faculty = profile["faculty"] as? String
-        val yearLevel = profile["yearLevel"] as? Int
-        if (programSlug != null && faculty != null) {
-            val isFirstYear = (yearLevel ?: 1) <= 1
-            val advisor = CourseRepository.getAdvisorForProgram(programSlug, isFirstYear, faculty)
-            if (advisor != null) {
-                editToEmail = advisor.email
-            }
-        }
+        refreshAdvisorContext()
     }
 
     // URL opener
@@ -265,10 +283,14 @@ fun AdvisorScreen(
                     Button(
                         onClick = {
                             if (issueText.isNotBlank()) {
-                                val result = buildEmailFromTemplate(issueText, displayName)
+                                val result = buildEmailFromTemplate(issueText)
                                 generatedEmail = result
                                 editSubject = result.subject
                                 editBody = result.body
+                                // Pre-fill from email with the signed-in user's email
+                                val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+                                if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
+                                if (!matchedAdvisor?.email.isNullOrBlank()) editToEmail = matchedAdvisor!!.email
                                 showComposeDialog = false
                                 issueText = ""
                                 showResultDialog = true
@@ -530,7 +552,7 @@ fun AdvisorScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // ── 1. Email Your Advisor (top section) ───────────────────────────
+            // ── 1. Your Advisor Match ────────────────────────────────────────
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -541,48 +563,135 @@ fun AdvisorScreen(
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Default.Email,
+                                Icons.Default.Info,
                                 contentDescription = null,
                                 tint = Color(0xFF333333),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Email Your Advisor",
+                                "Your Advisor Match",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                            Spacer(modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        refreshAdvisorContext(forceRefresh = true)
+                                    }
+                                }
+                            ) {
+                                Text("Refresh", color = Color.Gray)
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Need personalized help? Our AI assistant can help you draft a professional email to your academic advisor.",
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            lineHeight = 20.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { showComposeDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryYellow,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(
-                                Icons.Default.Email,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Compose Email to Advisor",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
+
+                        when {
+                            advisorLoading -> {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = primaryYellow
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Loading advisor details...", color = Color.Gray, fontSize = 14.sp)
+                                }
+                            }
+                            profileProgram == null -> {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Set your program and year level in your profile to get a personalized advisor match.",
+                                    fontSize = 14.sp,
+                                    color = Color.Gray,
+                                    lineHeight = 20.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = onViewProfile,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDDDDD))
+                                ) {
+                                    Text("Update Profile", color = Color.Black)
+                                }
+                            }
+                            else -> {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Program: ${profileProgram!!.name}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF333333)
+                                )
+                                Text(
+                                    "Year Level: ${profileYearLabel.ifBlank { "Not set" }}",
+                                    fontSize = 14.sp,
+                                    color = Color.Gray
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (matchedAdvisor != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(primaryYellow.copy(alpha = 0.12f))
+                                            .padding(12.dp)
+                                    ) {
+                                        Column {
+                                            Text("Matched Advisor", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                            Text(matchedAdvisor!!.name, fontSize = 14.sp, color = Color(0xFF333333))
+                                            Text(matchedAdvisor!!.email, fontSize = 13.sp, color = Color.Gray)
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        "No direct advisor mapping found yet for your profile. You can still email and use the faculty resources below.",
+                                        fontSize = 13.sp,
+                                        color = Color.Gray,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        advisorError?.let {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(it, fontSize = 13.sp, color = Color(0xFFB3261E))
+                        }
+
+                        if (!advisorLoading) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (matchedAdvisor != null) {
+                                        editToEmail = matchedAdvisor!!.email
+                                    }
+                                    showComposeDialog = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = primaryYellow,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.Email,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (matchedAdvisor != null) "Compose to ${matchedAdvisor!!.name}" else "Compose Email to Advisor",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
                     }
                 }

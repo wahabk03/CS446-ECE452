@@ -7,8 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 data class Timetable(
     val id: String,
     val name: String,
-    val courses: List<Course>,
-    val term: String = ""          // e.g. "1261", "1259", "1255"
+    val term: String = "1261",
+    val courses: List<Course>
 )
 
 object AppState {

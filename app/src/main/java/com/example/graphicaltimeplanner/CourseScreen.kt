@@ -52,6 +52,8 @@ fun CourseScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf("CS") }
+    var missingComponents by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showMissingComponentsDialog by remember { mutableStateOf(false) }
     // Derive the term directly from the active timetable so CourseScreen
     // always browses the same term that was chosen in HomeScreen.
     // Use derivedStateOf so this re-derives whenever *either* activeTimetableId
@@ -81,14 +83,27 @@ fun CourseScreen(
 
     val scope = rememberCoroutineScope()
 
+    // Let typed search override the subject tab when a subject prefix is present
+    // (e.g. "STAT 333" fetches STAT even if the active tab is CS).
+    val subjectFromQuery = remember(searchQuery) {
+        val query = searchQuery.trim().uppercase()
+        if (query.isBlank()) {
+            null
+        } else {
+            val prefix = Regex("^([A-Z]+)").find(query)?.groupValues?.getOrNull(1)
+            prefix?.takeIf { it in CourseRepository.ALL_SUBJECTS }
+        }
+    }
+    val fetchSubject = subjectFromQuery ?: selectedSubject
+
     // Clear expanded state when the subject or term changes so stale cards
     // don't stay open after a fresh load.
-    LaunchedEffect(selectedSubject, selectedTerm) {
+    LaunchedEffect(fetchSubject, selectedTerm) {
         expandedCourses.clear()
         isLoading = true
         errorMessage = null
         try {
-            courses = CourseRepository.getCourses(term = selectedTerm, subject = selectedSubject)
+            courses = CourseRepository.getCourses(term = selectedTerm, subject = fetchSubject)
         } catch (e: Exception) {
             errorMessage = e.message ?: "Failed to load courses"
             courses = emptyList()
@@ -121,6 +136,24 @@ fun CourseScreen(
                 it.code.lowercase().contains(q) || it.title.lowercase().contains(q)
             }
         }
+    }
+
+    if (showMissingComponentsDialog) {
+        AlertDialog(
+            onDismissRequest = { showMissingComponentsDialog = false },
+            title = { Text("Missing Required Sessions") },
+            text = {
+                val missing = missingComponents.joinToString(", ")
+                Text(
+                    "Please select all required session types before confirming this course: $missing."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showMissingComponentsDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -311,37 +344,39 @@ fun CourseScreen(
                                         expandedCourses.add(group.code)
                                     }
                                 },
-                                onAddSection = { section ->
-                                    val newCourse = Course(
-                                        code = group.code,
-                                        title = group.title,
-                                        section = section,
-                                        term = selectedTerm,
-                                        units = group.units
-                                    )
-                                    // Enforce one section per component type (LEC, TUT, LAB, etc.)
-                                    // within the same course: remove any existing section of the
-                                    // same type before adding the new one.
-                                    AppState.scheduledCourses.removeAll {
-                                        it.code == newCourse.code &&
-                                                it.section.componentType == newCourse.section.componentType
-                                    }
-                                    AppState.scheduledCourses.add(newCourse)
-                                    // Persist — keep add and remove paths consistent
-                                    scope.launch {
-                                        CourseRepository.saveUserSchedule(AppState.scheduledCourses)
-                                    }
+                                onMissingRequired = { missing ->
+                                    missingComponents = missing
+                                    showMissingComponentsDialog = true
                                 },
-                                onRemoveSection = { section ->
-                                    val toRemove = AppState.scheduledCourses.find {
-                                        it.code == group.code &&
-                                                it.section.classNumber == section.classNumber
+                                onConfirmSections = { confirmedSections ->
+                                    val newCourses = confirmedSections.map { section ->
+                                        Course(
+                                            code = group.code,
+                                            title = group.title,
+                                            section = section,
+                                            term = selectedTerm,
+                                            units = group.units
+                                        )
                                     }
-                                    if (toRemove != null) {
-                                        AppState.scheduledCourses.remove(toRemove)
-                                        scope.launch {
-                                            CourseRepository.saveUserSchedule(AppState.scheduledCourses)
+
+                                    // Replace this course's existing sections in one shot.
+                                    AppState.scheduledCourses.removeAll { it.code == group.code }
+                                    AppState.scheduledCourses.addAll(newCourses)
+
+                                    scope.launch {
+                                        val activeId = AppState.activeTimetableId.value
+                                        if (activeId != null) {
+                                            val idx = AppState.timetables.indexOfFirst { it.id == activeId }
+                                            if (idx >= 0) {
+                                                AppState.timetables[idx] = AppState.timetables[idx].copy(
+                                                    courses = AppState.scheduledCourses.toList()
+                                                )
+                                            }
                                         }
+                                        CourseRepository.saveAllTimetables(
+                                            AppState.timetables.toList(),
+                                            AppState.activeTimetableId.value
+                                        )
                                     }
                                 }
                             )
@@ -366,21 +401,45 @@ fun ExpandableCourseGroup(
     scheduledCourses: List<Course>,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
-    onAddSection: (Section) -> Unit,
-    onRemoveSection: (Section) -> Unit   // caller owns remove + save
+    onMissingRequired: (List<String>) -> Unit,
+    onConfirmSections: (List<Section>) -> Unit
 ) {
     val primaryYellow = Color(0xFFFFD700)
 
-    // Which distinct component types (LEC, TUT, LAB …) of this course are scheduled
-    val addedTypes = group.sections
-        .filter { course ->
-            scheduledCourses.any {
-                it.code == group.code && it.section.classNumber == course.section.classNumber
-            }
-        }
-        .map { it.section.componentType }
-        .distinct()
-        .sorted()
+    val committedByType = remember(scheduledCourses, group.code) {
+        scheduledCourses
+            .filter { it.code == group.code }
+            .associateBy { it.section.componentType }
+            .mapValues { it.value.section }
+    }
+
+    var pendingByType by remember(group.code) {
+        mutableStateOf<Map<String, Section>>(emptyMap())
+    }
+    var lastConfirmedByType by remember(group.code) {
+        mutableStateOf<Map<String, Section>>(emptyMap())
+    }
+
+    LaunchedEffect(committedByType, group.code) {
+        pendingByType = committedByType
+        lastConfirmedByType = committedByType
+    }
+
+    val requiredTypes = remember(group.sections) {
+        group.sections
+            .map { it.section.componentType }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
+
+    val selectedTypes = remember(pendingByType) {
+        pendingByType.keys.sorted()
+    }
+
+    val hasPendingChanges = remember(lastConfirmedByType, pendingByType) {
+        lastConfirmedByType != pendingByType
+    }
 
     Card(
         modifier = Modifier
@@ -416,23 +475,65 @@ fun ExpandableCourseGroup(
                     )
                 }
 
-                if (addedTypes.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(end = 8.dp)
+                Column(
+                    modifier = Modifier
+                        .width(90.dp)
+                        .height(64.dp)
+                        .padding(end = 8.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(3f),
+                        contentAlignment = Alignment.Center
                     ) {
-                        addedTypes.forEach { type ->
-                            Box(
-                                modifier = Modifier
-                                    .background(primaryYellow, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                        if (hasPendingChanges) {
+                            Button(
+                                onClick = {
+                                    val missing = requiredTypes.filter { !pendingByType.containsKey(it) }
+                                    if (missing.isNotEmpty()) {
+                                        onMissingRequired(missing)
+                                    } else {
+                                        // Clear pending state immediately for responsive UX.
+                                        lastConfirmedByType = pendingByType
+                                        onConfirmSections(pendingByType.values.toList())
+                                    }
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = primaryYellow,
+                                    contentColor = Color.Black
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = type,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Black
-                                )
+                                Text("Confirm", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            selectedTypes.forEach { type ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(primaryYellow, RoundedCornerShape(7.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = type,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
@@ -458,16 +559,9 @@ fun ExpandableCourseGroup(
 
                     group.sections.forEachIndexed { index, course ->
                         val section = course.section
-                        // This exact section is currently scheduled
-                        val isAdded = scheduledCourses.any {
-                            it.code == group.code && it.section.classNumber == section.classNumber
-                        }
-                        // A *different* section of the same component type is scheduled
-                        // (e.g. user already has LEC 001, now looking at LEC 002)
-                        val isConflicting = !isAdded && scheduledCourses.any {
-                            it.code == group.code &&
-                                    it.section.componentType == section.componentType
-                        }
+                        val selectedForType = pendingByType[section.componentType]
+                        val isSelected = selectedForType?.classNumber == section.classNumber
+                        val isSwap = selectedForType != null && !isSelected
 
                         Row(
                             modifier = Modifier
@@ -500,51 +594,42 @@ fun ExpandableCourseGroup(
                                 )
                             }
 
-                            when {
-                                isAdded -> {
-                                    // Currently selected — tap to deselect
-                                    Button(
-                                        onClick = { onRemoveSection(section) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = primaryYellow.copy(alpha = 0.15f),
-                                            contentColor = primaryYellow
-                                        ),
-                                        shape = RoundedCornerShape(20.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text("✓ Added", fontSize = 14.sp)
+                            Button(
+                                onClick = {
+                                    pendingByType = pendingByType.toMutableMap().apply {
+                                        this[section.componentType] = section
                                     }
-                                }
-                                isConflicting -> {
-                                    // Different section of same type already chosen — offer swap
-                                    Button(
-                                        onClick = { onAddSection(section) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color.White,
-                                            contentColor = Color(0xFFFF8C00)
-                                        ),
-                                        border = BorderStroke(1.dp, Color(0xFFFF8C00)),
-                                        shape = RoundedCornerShape(20.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text("↔ Swap", fontSize = 14.sp)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = when {
+                                        isSelected -> primaryYellow.copy(alpha = 0.18f)
+                                        else -> Color.White
+                                    },
+                                    contentColor = when {
+                                        isSelected -> primaryYellow
+                                        isSwap -> Color(0xFFFF8C00)
+                                        else -> primaryYellow
                                     }
-                                }
-                                else -> {
-                                    // Not added yet — plain add
-                                    Button(
-                                        onClick = { onAddSection(section) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color.White,
-                                            contentColor = primaryYellow
-                                        ),
-                                        border = BorderStroke(1.dp, primaryYellow),
-                                        shape = RoundedCornerShape(20.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text("+ Add", fontSize = 14.sp)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    when {
+                                        isSelected -> primaryYellow
+                                        isSwap -> Color(0xFFFF8C00)
+                                        else -> primaryYellow
                                     }
-                                }
+                                ),
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    when {
+                                        isSelected -> "Selected"
+                                        isSwap -> "Swap"
+                                        else -> "Select"
+                                    },
+                                    fontSize = 14.sp
+                                )
                             }
                         }
 

@@ -1,0 +1,163 @@
+package com.example.graphicaltimeplanner
+
+import android.content.Context
+import android.net.Uri
+import android.util.Base64
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.IOException
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
+import java.net.URL
+
+object AgentApi {
+    private const val BASE_URL = "http://10.0.2.2:5000/chat"
+    private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
+    private const val READ_TIMEOUT_MS = 120000
+    private const val CONNECT_TIMEOUT_MS = 30000
+    private const val MAX_RETRIES = 2
+
+    data class AgentResponse(val response: String, val showButton: Boolean)
+
+    private suspend fun <T> withRetry(block: () -> T): T {
+        var attempt = 0
+        var lastException: Exception? = null
+
+        while (attempt <= MAX_RETRIES) {
+            try {
+                return block()
+            } catch (e: SocketTimeoutException) {
+                lastException = e
+            } catch (e: IOException) {
+                lastException = e
+            }
+
+            attempt++
+            if (attempt <= MAX_RETRIES) {
+                // Short linear backoff to avoid immediate reconnect on transient server/socket drops.
+                kotlinx.coroutines.delay(500L * attempt)
+            }
+        }
+
+        throw (lastException ?: IOException("Request failed after retries"))
+    }
+
+    suspend fun sendMessage(
+        context: Context,
+        message: String,
+        history: List<ChatMessage>,
+        fileUri: Uri?,
+        fileName: String?
+    ): AgentResponse = withContext(Dispatchers.IO) {
+        try {
+            val user = FirebaseAuth.getInstance().currentUser
+            val uid = user?.uid ?: "anonymous"
+            
+            val jsonBody = JSONObject().apply {
+                put("uid", uid)
+                put("message", message)
+                
+                val historyArray = JSONArray()
+                // exclude the newly added user message from history if we want, or just send previous
+                // Wait, AgentScreen.kt already appended it to messages. Let's pass the prior ones.
+                // We'll trust history is proper.
+                for (msg in history) {
+                    val msgObj = JSONObject()
+                    msgObj.put("role", msg.role)
+                    msgObj.put("content", msg.content ?: "")
+                    historyArray.put(msgObj)
+                }
+                put("history", historyArray)
+
+                if (fileUri != null && fileName != null) {
+                    put("file_name", fileName)
+                    val inputStream = context.contentResolver.openInputStream(fileUri)
+                    val bytes = inputStream?.readBytes()
+                    inputStream?.close()
+                    if (bytes != null) {
+                        val base64Str = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        put("file_bytes", base64Str)
+                    }
+                }
+            }
+
+            return@withContext withRetry {
+                val url = URL(BASE_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                try {
+                    connection.readTimeout = READ_TIMEOUT_MS
+                    connection.connectTimeout = CONNECT_TIMEOUT_MS
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("Connection", "close")
+                    connection.doOutput = true
+
+                    val writer = OutputStreamWriter(connection.outputStream)
+                    writer.write(jsonBody.toString())
+                    writer.flush()
+                    writer.close()
+
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
+                        val jsonObj = JSONObject(responseStr)
+                        val responseText = jsonObj.optString("response", "No response")
+                        val showButton = jsonObj.optBoolean("show_button", false)
+                        AgentResponse(responseText, showButton)
+                    } else {
+                        val err = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                        AgentResponse("Error ($responseCode): $err", false)
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext AgentResponse("Error: ${e.message}", false)
+        }
+    }
+
+    suspend fun summarizeChat(message: String): String = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("message", message)
+            }
+            return@withContext withRetry {
+                val url = URL(SUMMARIZE_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                try {
+                    connection.readTimeout = READ_TIMEOUT_MS
+                    connection.connectTimeout = CONNECT_TIMEOUT_MS
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("Connection", "close")
+                    connection.doOutput = true
+
+                    val writer = OutputStreamWriter(connection.outputStream)
+                    writer.write(jsonBody.toString())
+                    writer.flush()
+                    writer.close()
+
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
+                        val jsonObj = JSONObject(responseStr)
+                        jsonObj.optString("summary", "Chat Session")
+                    } else {
+                        "Chat Session"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return@withContext "Chat Session"
+    }
+}

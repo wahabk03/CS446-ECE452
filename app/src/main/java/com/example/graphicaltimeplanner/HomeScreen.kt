@@ -8,6 +8,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,15 +41,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -80,116 +82,63 @@ import java.util.UUID
 
 // ─── iCal export helper ───────────────────────────────────────────────────────
 
-/**
- * Term → (firstMonday, lastFriday) in yyyyMMdd format.
- * Covers UWaterloo's Winter 2026, Fall 2025, and Spring 2025 terms.
- */
-private val termDateRanges = mapOf(
-    "1261" to ("20260105" to "20260417"),  // Winter 2026
-    "1259" to ("20250908" to "20251205"),  // Fall 2025
-    "1255" to ("20250505" to "20250725")   // Spring 2025
-)
-
-/** Map from our day strings to the ISO weekday offsets from Monday (0=Mon…4=Fri). */
-private val dayOffset = mapOf("Mon" to 0, "Tue" to 1, "Wed" to 2, "Thu" to 3, "Fri" to 4)
-private val dayToIcal = mapOf(
-    "Mon" to "MO", "Tue" to "TU", "Wed" to "WE",
-    "Thu" to "TH", "Fri" to "FR", "Sat" to "SA", "Sun" to "SU"
-)
-
-/**
- * Return the yyyyMMdd string for the first occurrence of [day] on or after
- * the Monday given by [firstMondayStr] (format yyyyMMdd).
- */
-private fun firstOccurrence(firstMondayStr: String, day: String): String {
-    val offset = dayOffset[day] ?: 0
-    val y = firstMondayStr.substring(0, 4).toInt()
-    val m = firstMondayStr.substring(4, 6).toInt()
-    val d = firstMondayStr.substring(6, 8).toInt()
-    // Add offset days using simple carry arithmetic
-    var day2 = d + offset
-    var mon2 = m
-    val daysInMonth = intArrayOf(0,31,28,31,30,31,30,31,31,30,31,30,31)
-    if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) daysInMonth[2] = 29
-    while (day2 > daysInMonth[mon2]) {
-        day2 -= daysInMonth[mon2]; mon2++
-    }
-    return "%04d%02d%02d".format(y, mon2, day2)
-}
-
-/**
- * Fold long iCal lines per RFC 5545 §3.1 (max 75 octets, continuation
- * lines begin with a single space).
- */
-private fun foldLine(line: String): String {
-    if (line.length <= 75) return line
+private fun buildIcsContent(courses: List<Course>): String {
     val sb = StringBuilder()
-    var i = 0
-    var first = true
-    while (i < line.length) {
-        val take = if (first) 75 else 74
-        val end = minOf(i + take, line.length)
-        if (!first) sb.append("\r\n ")
-        sb.append(line.substring(i, end))
-        i = end; first = false
-    }
-    return sb.toString()
-}
+    sb.appendLine("BEGIN:VCALENDAR")
+    sb.appendLine("VERSION:2.0")
+    sb.appendLine("PRODID:-//GraphicalTimePlanner//EN")
+    sb.appendLine("CALSCALE:GREGORIAN")
+    sb.appendLine("METHOD:PUBLISH")
 
-private fun buildIcsContent(courses: List<Course>, term: String = "1261"): String {
-    val (firstMonday, lastFriday) = termDateRanges[term] ?: termDateRanges["1261"]!!
-    val crlf = "\r\n"
-    val sb = StringBuilder()
-    sb.append("BEGIN:VCALENDAR$crlf")
-    sb.append("VERSION:2.0$crlf")
-    sb.append("PRODID:-//GraphicalTimePlanner//UWaterloo//EN$crlf")
-    sb.append("CALSCALE:GREGORIAN$crlf")
-    sb.append("METHOD:PUBLISH$crlf")
+    val dayToIcal = mapOf(
+        "Mon" to "MO", "Tue" to "TU", "Wed" to "WE",
+        "Thu" to "TH", "Fri" to "FR", "Sat" to "SA", "Sun" to "SU"
+    )
+
+    // Use a fixed reference week (first week of term) – Mon 2026-01-05
+    val refMonday = mapOf(
+        "Mon" to "20260105", "Tue" to "20260106", "Wed" to "20260107",
+        "Thu" to "20260108", "Fri" to "20260109"
+    )
 
     for (course in courses) {
         val s = course.section
-        if (s.days.isEmpty()) continue          // skip TBA sections
-        if (s.startTime == s.endTime) continue  // skip zero-length sections
-
-        // Use the first meeting day as the DTSTART anchor
-        val anchorDay = s.days.first()
-        val dateStr = firstOccurrence(firstMonday, anchorDay)
-        val icalDays = s.days.mapNotNull { dayToIcal[it] }.joinToString(",")
-        val uid = UUID.randomUUID().toString()
-        val startStr = "%sT%02d%02d00".format(dateStr, s.startTime.hour, s.startTime.minute)
-        val endStr   = "%sT%02d%02d00".format(dateStr, s.endTime.hour, s.endTime.minute)
-        val untilStr = "${lastFriday}T235959Z"
-        val location = s.location.ifBlank { "TBA" }
-
-        sb.append("BEGIN:VEVENT$crlf")
-        sb.append(foldLine("UID:$uid") + crlf)
-        sb.append(foldLine("DTSTART:$startStr") + crlf)
-        sb.append(foldLine("DTEND:$endStr") + crlf)
-        sb.append(foldLine("RRULE:FREQ=WEEKLY;BYDAY=$icalDays;UNTIL=$untilStr") + crlf)
-        sb.append(foldLine("SUMMARY:${course.code} - ${s.component}") + crlf)
-        sb.append(foldLine("LOCATION:$location") + crlf)
-        sb.append(foldLine("DESCRIPTION:${course.title}") + crlf)
-        sb.append("END:VEVENT$crlf")
+        for (day in s.days) {
+            val dateStr = refMonday[day] ?: continue
+            val icalDays = s.days.mapNotNull { dayToIcal[it] }.joinToString(",")
+            val uid = UUID.randomUUID().toString()
+            val startStr = "%sT%02d%02d00".format(dateStr, s.startTime.hour, s.startTime.minute)
+            val endStr   = "%sT%02d%02d00".format(dateStr, s.endTime.hour,   s.endTime.minute)
+            sb.appendLine("BEGIN:VEVENT")
+            sb.appendLine("UID:$uid")
+            sb.appendLine("DTSTART:$startStr")
+            sb.appendLine("DTEND:$endStr")
+            sb.appendLine("RRULE:FREQ=WEEKLY;BYDAY=$icalDays;COUNT=13")
+            sb.appendLine("SUMMARY:${course.code} – ${s.component}")
+            sb.appendLine("LOCATION:${s.location}")
+            sb.appendLine("DESCRIPTION:${course.title}")
+            sb.appendLine("END:VEVENT")
+            break  // one VEVENT per course (RRULE covers all days)
+        }
     }
 
-    sb.append("END:VCALENDAR$crlf")
+    sb.appendLine("END:VCALENDAR")
     return sb.toString()
 }
 
-private fun saveIcsToCache(context: Context, icsContent: String): android.net.Uri? {
+private fun saveIcsToDownloads(context: Context, icsContent: String): Boolean {
     return try {
-        // Write to app cache dir and expose via FileProvider so any calendar
-        // app can read it — MediaStore Download URIs are not readable by third-
-        // party apps without a FileProvider on API 29+.
-        val file = java.io.File(context.cacheDir, "timetable.ics")
-        file.writeText(icsContent, Charsets.UTF_8)
-        androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            file
-        )
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, "timetable.ics")
+            put(MediaStore.Downloads.MIME_TYPE, "text/calendar")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+        resolver.openOutputStream(uri)?.use { it.write(icsContent.toByteArray()) }
+        true
     } catch (e: Exception) {
-        null
+        false
     }
 }
 
@@ -201,86 +150,53 @@ private val courseColorInts = listOf(
 )
 
 private fun renderTimetableBitmap(courses: List<Course>): Bitmap {
-    // Always render all 5 weekdays so the exported PNG matches the on-screen timetable
-    val activeDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
-
-    // Trim hours to actual schedule range (±30 min padding)
-    val scheduleStart = courses.minOfOrNull { it.section.startTime.toFloat() }?.let {
-        maxOf(8f, it - 0.5f) }.run { this?.toInt() ?: 8 }
-    val scheduleEnd = courses.maxOfOrNull { it.section.endTime.toFloat() }?.let {
-        minOf(22f, it + 0.5f) }.run { this?.toInt()?.plus(1) ?: 22 }
-
-    val hourPx  = 100f          // taller rows → more readable text
-    val timeColW = 90f
-    val headerH  = 60f
-    val colW     = 180f
-    val padding  = 20f          // outer padding on all sides
-    val totalW   = (padding * 2 + timeColW + colW * activeDays.size).toInt()
-    val totalH   = (padding * 2 + headerH + (scheduleEnd - scheduleStart + 1) * hourPx).toInt()
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+    val startHour = 8
+    val endHour = 22
+    val hourPx = 80f
+    val timeColW = 80f
+    val headerH = 50f
+    val colW = 160f
+    val totalW = (timeColW + colW * days.size).toInt()
+    val totalH = (headerH + (endHour - startHour + 1) * hourPx).toInt()
 
     val bmp = Bitmap.createBitmap(totalW, totalH, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
+    canvas.drawColor(android.graphics.Color.WHITE)
 
-    // Background
-    canvas.drawColor(android.graphics.Color.parseColor("#FAFAFA"))
-
-    // Draw a white card area
-    val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
+    val gridPaint = Paint().apply { color = android.graphics.Color.parseColor("#E0E0E0"); strokeWidth = 1f }
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#888888")
+        textSize = 28f
     }
-    canvas.drawRoundRect(
-        RectF(padding, padding, totalW - padding, totalH - padding),
-        16f, 16f, cardPaint
-    )
-
-    val gridPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E8E8E8"); strokeWidth = 1.5f
+    val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#FFD700")
+        textSize = 30f
+        typeface = Typeface.DEFAULT_BOLD
     }
-    val hourLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#AAAAAA"); textSize = 26f
+    val blockTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK; textSize = 24f; typeface = Typeface.DEFAULT_BOLD
     }
-    val dayHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#333333")
-        textSize = 28f; typeface = Typeface.DEFAULT_BOLD
-        textAlign = Paint.Align.CENTER
-    }
-    val blockTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK; textSize = 26f; typeface = Typeface.DEFAULT_BOLD
-        textAlign = Paint.Align.CENTER
-    }
-    val blockSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#444444"); textSize = 21f
-        textAlign = Paint.Align.CENTER
-    }
-    val blockTimePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#666666"); textSize = 19f
-        textAlign = Paint.Align.CENTER
+    val subTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#444444"); textSize = 20f
     }
 
-    val gridLeft  = padding + timeColW
-    val gridTop   = padding + headerH
-    val gridRight = totalW - padding
-    val gridBottom = totalH - padding
-
-    // Day column dividers + headers
-    activeDays.forEachIndexed { i, day ->
-        val x = gridLeft + i * colW
-        canvas.drawLine(x, padding, x, gridBottom, gridPaint)
-        canvas.drawText(day, x + colW / 2f, padding + headerH - 16f, dayHeaderPaint)
+    // Day headers
+    days.forEachIndexed { i, day ->
+        val x = timeColW + i * colW + colW / 2f
+        boldPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(day, x, headerH - 10f, boldPaint)
+        canvas.drawLine(timeColW + i * colW, 0f, timeColW + i * colW, totalH.toFloat(), gridPaint)
     }
-    canvas.drawLine(gridRight, padding, gridRight, gridBottom, gridPaint)
+    canvas.drawLine(timeColW + days.size * colW, 0f, timeColW + days.size * colW, totalH.toFloat(), gridPaint)
+    canvas.drawLine(0f, headerH, totalW.toFloat(), headerH, gridPaint)
 
-    // Header / grid separator
-    canvas.drawLine(padding, gridTop, gridRight, gridTop, gridPaint)
-    // Left time-column separator
-    canvas.drawLine(gridLeft, padding, gridLeft, gridBottom, gridPaint)
-
-    // Hour rows + labels
-    for (h in scheduleStart..scheduleEnd) {
-        val y = gridTop + (h - scheduleStart) * hourPx
-        canvas.drawLine(gridLeft, y, gridRight, y, gridPaint)
-        hourLabelPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("%d:00".format(h), gridLeft - 8f, y + 20f, hourLabelPaint)
+    // Hour lines + labels
+    for (h in startHour..endHour) {
+        val y = headerH + (h - startHour) * hourPx
+        canvas.drawLine(0f, y, totalW.toFloat(), y, gridPaint)
+        textPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("%d:00".format(h), timeColW - 6f, y + 20f, textPaint)
     }
 
     // Course color map
@@ -290,67 +206,43 @@ private fun renderTimetableBitmap(courses: List<Course>): Bitmap {
     }
 
     val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    val blockBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 2f
-        color = android.graphics.Color.parseColor("#22000000")
-    }
     for (course in courses) {
-        val argb = colorMap[course.code] ?: courseColorInts[0]
-        blockPaint.color = argb
+        val color = colorMap[course.code] ?: courseColorInts[0]
+        blockPaint.color = color
         for (day in course.section.days) {
-            val di = activeDays.indexOf(day)
+            val di = days.indexOf(day)
             if (di < 0) continue
             val startF = course.section.startTime.toFloat()
-            val endF   = course.section.endTime.toFloat()
+            val endF = course.section.endTime.toFloat()
             if (endF <= startF) continue
-            val inset = 5f
-            val left   = gridLeft + di * colW + inset
-            val top    = gridTop + (startF - scheduleStart) * hourPx + inset
-            val right  = left + colW - inset * 2
-            val bottom = gridTop + (endF - scheduleStart) * hourPx - inset
-            val rect   = RectF(left, top, right, bottom)
-            canvas.drawRoundRect(rect, 14f, 14f, blockPaint)
-            canvas.drawRoundRect(rect, 14f, 14f, blockBorderPaint)
-
+            val left = timeColW + di * colW + 4f
+            val top = headerH + (startF - startHour) * hourPx + 2f
+            val right = left + colW - 8f
+            val bottom = headerH + (endF - startHour) * hourPx - 2f
+            canvas.drawRoundRect(RectF(left, top, right, bottom), 12f, 12f, blockPaint)
+            blockTextPaint.textAlign = Paint.Align.CENTER
             val cx = (left + right) / 2f
-            val blockH = bottom - top
-            // Vertically centre text inside the block
-            val lineH = 32f
-            val totalTextH = when {
-                blockH >= 100f -> lineH * 3
-                blockH >= 60f  -> lineH * 2
-                else           -> lineH
-            }
-            var textY = top + (blockH - totalTextH) / 2f + lineH
-
-            canvas.drawText(course.code, cx, textY, blockTitlePaint)
-            if (blockH >= 60f) {
-                textY += lineH
-                canvas.drawText(course.section.component, cx, textY, blockSubPaint)
-            }
-            if (blockH >= 100f) {
-                textY += lineH - 4f
-                canvas.drawText(
-                    "${course.section.startTime}-${course.section.endTime}",
-                    cx, textY, blockTimePaint
-                )
-            }
+            canvas.drawText(course.code, cx, top + 30f, blockTextPaint)
+            subTextPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(course.section.component, cx, top + 54f, subTextPaint)
         }
     }
     return bmp
 }
 
-private fun saveBitmapToCache(context: Context, bmp: Bitmap): android.net.Uri? {
+private fun saveBitmapToDownloads(context: Context, bmp: Bitmap): Boolean {
     return try {
-        val file = java.io.File(context.cacheDir, "timetable.png")
-        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            file
-        )
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "timetable.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        resolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        true
     } catch (e: Exception) {
-        null
+        false
     }
 }
 
@@ -371,13 +263,32 @@ fun HomeScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Observe the SnapshotStateList directly so exports always get the live list.
-    val scheduledCourses = AppState.scheduledCourses
+    val scheduledCourses by rememberUpdatedState(AppState.scheduledCourses.toList())
     val displayName by AppState.displayName
     val nameInitial = displayName.firstOrNull()?.uppercaseChar()?.toString()
 
     // Export dialog state
     var showExportSheet by remember { mutableStateOf(false) }
+
+    // One-time program selection prompt
+    var showProgramPrompt by remember { mutableStateOf(false) }
+    var promptPrograms by remember { mutableStateOf<List<Program>>(emptyList()) }
+    var promptSearchQuery by remember { mutableStateOf("") }
+    var promptSelectedProgram by remember { mutableStateOf<Program?>(null) }
+    var promptSelectedYear by remember { mutableStateOf("") }
+    val promptYearLevels = listOf("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B")
+    var promptSaving by remember { mutableStateOf(false) }
+    var promptDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Show prompt only when the user has not selected a program yet.
+    LaunchedEffect(Unit) {
+        val profile = CourseRepository.getUserExtendedProfile()
+        val programSlug = profile["program"] as? String
+        if (programSlug.isNullOrBlank()) {
+            promptPrograms = CourseRepository.getPrograms()
+            showProgramPrompt = true
+        }
+    }
 
     // Timetable dropdown state
     var showTimetableDropdown by remember { mutableStateOf(false) }
@@ -386,10 +297,8 @@ fun HomeScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var newTimetableName by remember { mutableStateOf("") }
-    var newTimetableTerm by remember { mutableStateOf("1261") }  // default: Winter 2026
-    // True while the initial Firebase load is in flight — prevents
-    // the "no timetable" prompt from flashing before data arrives.
-    var isFirstLoad by remember { mutableStateOf(true) }
+    var newTimetableTerm by remember { mutableStateOf("1261") }
+    var hasLoadedTimetables by remember { mutableStateOf(false) }
 
     val timetables = AppState.timetables
     val activeTimetableId by AppState.activeTimetableId
@@ -409,26 +318,29 @@ fun HomeScreen(
     // Load all timetables from Firebase on first open
     LaunchedEffect(Unit) {
         val (loadedTimetables, activeId) = CourseRepository.loadAllTimetables()
-        // Only keep timetables that have a term set. Termless ones are
-        // legacy defaults ("My Timetable") — treat them as non-existent
-        // so the user is prompted to create a proper term-scoped timetable.
-        val validTimetables = loadedTimetables.filter { it.term.isNotBlank() }
-        if (validTimetables.isNotEmpty()) {
+        if (loadedTimetables.isNotEmpty()) {
             AppState.timetables.clear()
-            AppState.timetables.addAll(validTimetables)
-            val resolvedId = (if (activeId != null && validTimetables.any { it.id == activeId }) activeId
-            else validTimetables.first().id)
+            AppState.timetables.addAll(loadedTimetables)
+            val resolvedId = activeId ?: loadedTimetables.first().id
             AppState.activeTimetableId.value = resolvedId
-            val activeCourses = validTimetables.find { it.id == resolvedId }?.courses ?: emptyList()
+            val activeCourses = loadedTimetables.find { it.id == resolvedId }?.courses ?: emptyList()
             AppState.scheduledCourses.clear()
             AppState.scheduledCourses.addAll(activeCourses)
+        } else {
+            // First ever login — create a default timetable
+            val defaultId = java.util.UUID.randomUUID().toString()
+            val defaultTimetable = Timetable(id = defaultId, name = "My Timetable", term = "1261", courses = emptyList())
+            AppState.timetables.add(defaultTimetable)
+            AppState.activeTimetableId.value = defaultId
+            AppState.scheduledCourses.clear()
+            AppState.scheduledCourses.addAll(defaultTimetable.courses)
         }
-        // No valid timetables — leave AppState empty, UI will prompt the user.
-        isFirstLoad = false
+        hasLoadedTimetables = true
     }
 
     // Save active timetable back to Firebase whenever courses change
     LaunchedEffect(scheduledCourses.toList(), activeTimetableId) {
+        if (!hasLoadedTimetables) return@LaunchedEffect
         val id = activeTimetableId ?: return@LaunchedEffect
         val idx = AppState.timetables.indexOfFirst { it.id == id }
         if (idx >= 0) {
@@ -455,27 +367,13 @@ fun HomeScreen(
                             .clickable {
                                 showExportSheet = false
                                 coroutineScope.launch {
-                                    val term = AppState.timetables
-                                        .find { it.id == activeTimetableId }?.term ?: "1261"
-                                    val ics = buildIcsContent(scheduledCourses, term)
-                                    val uri = withContext(Dispatchers.IO) {
-                                        saveIcsToCache(context, ics)
-                                    }
-                                    if (uri != null) {
-                                        // ACTION_SEND lets the user pick any calendar app.
-                                        // Using FLAG_GRANT_READ_URI_PERMISSION so the receiving
-                                        // app can read our FileProvider URI.
-                                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                            type = "text/calendar"
-                                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        context.startActivity(
-                                            android.content.Intent.createChooser(intent, "Import into calendar")
-                                        )
-                                    } else {
-                                        Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
-                                    }
+                                    val ics = buildIcsContent(scheduledCourses)
+                                    val ok = withContext(Dispatchers.IO) { saveIcsToDownloads(context, ics) }
+                                    Toast.makeText(
+                                        context,
+                                        if (ok) "timetable.ics saved to Downloads" else "Export failed",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                         shape = RoundedCornerShape(12.dp),
@@ -504,25 +402,13 @@ fun HomeScreen(
                             .clickable {
                                 showExportSheet = false
                                 coroutineScope.launch {
-                                    val bmp = withContext(Dispatchers.Default) {
-                                        renderTimetableBitmap(scheduledCourses)
-                                    }
-                                    val uri = withContext(Dispatchers.IO) {
-                                        saveBitmapToCache(context, bmp)
-                                    }
-                                    if (uri != null) {
-                                        // Offer share sheet so user can save/send immediately
-                                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                            type = "image/png"
-                                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        context.startActivity(
-                                            android.content.Intent.createChooser(shareIntent, "Share timetable")
-                                        )
-                                    } else {
-                                        Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
-                                    }
+                                    val bmp = withContext(Dispatchers.Default) { renderTimetableBitmap(scheduledCourses) }
+                                    val ok = withContext(Dispatchers.IO) { saveBitmapToDownloads(context, bmp) }
+                                    Toast.makeText(
+                                        context,
+                                        if (ok) "timetable.png saved to Downloads" else "Export failed",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                         shape = RoundedCornerShape(12.dp),
@@ -547,6 +433,167 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = { showExportSheet = false }) {
                     Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
+
+    // ── Program selection prompt (one-time on first login) ─────────────────
+    if (showProgramPrompt) {
+        AlertDialog(
+            onDismissRequest = { /* keep explicit action */ },
+            title = {
+                Text("Welcome! Choose Your Program", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        "Select your program and year level so we can connect you with the right academic advisor.",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = promptSearchQuery,
+                        onValueChange = {
+                            promptSearchQuery = it
+                            promptDropdownExpanded = true
+                        },
+                        placeholder = {
+                            Text(
+                                promptSelectedProgram?.name ?: "Search program...",
+                                color = if (promptSelectedProgram != null) Color(0xFF444444) else Color.Gray,
+                                fontSize = 14.sp
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { if (it.isFocused) promptDropdownExpanded = true },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = primaryYellow,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    if (promptDropdownExpanded && promptPrograms.isNotEmpty()) {
+                        val filtered = if (promptSearchQuery.isBlank()) {
+                            promptPrograms.take(6)
+                        } else {
+                            promptPrograms.filter {
+                                it.name.contains(promptSearchQuery, ignoreCase = true)
+                            }.take(6)
+                        }
+                        if (filtered.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    filtered.forEach { program ->
+                                        Text(
+                                            "${program.name} (${program.faculty})",
+                                            fontSize = 13.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    promptSelectedProgram = program
+                                                    promptSearchQuery = ""
+                                                    promptDropdownExpanded = false
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (promptSelectedProgram != null && !promptDropdownExpanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Selected: ${promptSelectedProgram!!.name}",
+                            fontSize = 13.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Year Level", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        promptYearLevels.forEach { year ->
+                            val selected = promptSelectedYear == year
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (selected) primaryYellow else Color(0xFFF0F0F0))
+                                    .clickable { promptSelectedYear = year }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    year,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) Color.Black else Color(0xFF666666)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (promptSelectedProgram != null) {
+                            promptSaving = true
+                            coroutineScope.launch {
+                                val yearNum = if (promptSelectedYear.isNotBlank()) {
+                                    promptSelectedYear.first().digitToInt()
+                                } else {
+                                    1
+                                }
+                                CourseRepository.saveUserExtendedProfile(
+                                    mapOf(
+                                        "program" to promptSelectedProgram!!.slug,
+                                        "faculty" to promptSelectedProgram!!.faculty,
+                                        "yearLevel" to yearNum,
+                                        "yearLevelLabel" to promptSelectedYear
+                                    )
+                                )
+                                CourseRepository.getAdvisors(forceRefresh = true)
+                                promptSaving = false
+                                showProgramPrompt = false
+                            }
+                        }
+                    },
+                    enabled = promptSelectedProgram != null && !promptSaving,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryYellow,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showProgramPrompt = false }) {
+                    Text("Skip for now", color = Color.Gray)
                 }
             }
         )
@@ -613,8 +660,8 @@ fun HomeScreen(
                 }
             }
 
-            // Timetable selector row — hidden until user has at least one timetable
-            if (timetables.isNotEmpty()) Row(
+            // Timetable selector row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -623,6 +670,9 @@ fun HomeScreen(
             ) {
                 // Left: Dropdown with border + "+" with border
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val activeTimetable = timetables.find { it.id == activeTimetableId }
+                    val activeTimetableHasConflict = activeTimetable?.let { hasTimeConflict(it.courses) } == true
+
                     Box {
                         Row(
                             modifier = Modifier
@@ -633,20 +683,18 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = timetables.find { it.id == activeTimetableId }?.name ?: "My Timetable",
+                                    text = activeTimetable?.name ?: "My Timetable",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                val activeTerm = timetables.find { it.id == activeTimetableId }?.term ?: ""
-                                val activeTermLabel = CourseRepository.TERM_MAPPINGS
-                                    .find { it.first == activeTerm }?.second ?: ""
-                                if (activeTermLabel.isNotEmpty()) {
+                                if (activeTimetableHasConflict) {
                                     Text(
-                                        text = activeTermLabel,
-                                        fontSize = 11.sp,
-                                        color = Color.Gray
+                                        text = " !",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFE53935)
                                     )
                                 }
                             }
@@ -664,22 +712,21 @@ fun HomeScreen(
                             modifier = Modifier.background(Color.White)
                         ) {
                             timetables.forEach { tt ->
+                                val timetableHasConflict = hasTimeConflict(tt.courses)
                                 DropdownMenuItem(
                                     text = {
-                                        Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
                                                 tt.name,
                                                 fontWeight = if (tt.id == activeTimetableId) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (tt.id == activeTimetableId) primaryYellow else Color.Black,
-                                                fontSize = 15.sp
+                                                color = if (tt.id == activeTimetableId) primaryYellow else Color.Black
                                             )
-                                            val ttTermLabel = CourseRepository.TERM_MAPPINGS
-                                                .find { it.first == tt.term }?.second ?: ""
-                                            if (ttTermLabel.isNotEmpty()) {
+                                            if (timetableHasConflict) {
                                                 Text(
-                                                    text = ttTermLabel,
-                                                    fontSize = 11.sp,
-                                                    color = Color.Gray
+                                                    text = " !",
+                                                    color = Color(0xFFE53935),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp
                                                 )
                                             }
                                         }
@@ -813,7 +860,7 @@ fun HomeScreen(
                                     } else {
                                         // No timetables left — create a fresh default
                                         val newId = java.util.UUID.randomUUID().toString()
-                                        val defaultTt = Timetable(id = newId, name = "My Timetable", courses = emptyList())
+                                        val defaultTt = Timetable(id = newId, name = "My Timetable", term = "1261", courses = emptyList())
                                         AppState.timetables.add(defaultTt)
                                         AppState.activeTimetableId.value = newId
                                         AppState.scheduledCourses.clear()
@@ -836,24 +883,16 @@ fun HomeScreen(
             // Add Timetable dialog
             if (showAddTimetableDialog) {
                 AlertDialog(
-                    onDismissRequest = {
-                        showAddTimetableDialog = false
-                        newTimetableName = ""
-                        newTimetableTerm = "1261"
-                    },
+                    onDismissRequest = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "1261" },
                     shape = RoundedCornerShape(16.dp),
                     containerColor = Color.White,
                     title = { Text("New Timetable", fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
-                            // ── Name field ────────────────────────────────────
-                            Text("Plan Name", fontSize = 13.sp, color = Color.Gray,
-                                fontWeight = FontWeight.Medium)
-                            Spacer(modifier = Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = newTimetableName,
                                 onValueChange = { newTimetableName = it },
-                                placeholder = { Text("e.g. My Fall Plan") },
+                                placeholder = { Text("Timetable Name") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp),
@@ -863,42 +902,28 @@ fun HomeScreen(
                                     cursorColor = primaryYellow
                                 )
                             )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // ── Term picker ───────────────────────────────────
-                            Text("Term", fontSize = 13.sp, color = Color.Gray,
-                                fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Select Term:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CourseRepository.TERM_MAPPINGS.forEach { (termCode, termLabel) ->
-                                    val isSelected = newTimetableTerm == termCode
-                                    FilterChip(
-                                        selected = isSelected,
+                            val terms = listOf(
+                                "1261" to "Winter 2026",
+                                "1259" to "Fall 2025",
+                                "1255" to "Spring 2025"
+                            )
+                            terms.forEach { (termCode, termLabel) ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { newTimetableTerm = termCode }
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = (newTimetableTerm == termCode),
                                         onClick = { newTimetableTerm = termCode },
-                                        label = {
-                                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Text(
-                                                    text = termLabel,
-                                                    fontSize = 14.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = primaryYellow,
-                                            selectedLabelColor = Color.Black,
-                                            containerColor = Color(0xFFF5F5F5),
-                                            labelColor = Color.DarkGray
-                                        ),
-                                        border = FilterChipDefaults.filterChipBorder(
-                                            enabled = true,
-                                            selected = isSelected,
-                                            selectedBorderColor = primaryYellow,
-                                            borderColor = Color(0xFFDDDDDD)
-                                        )
+                                        colors = RadioButtonDefaults.colors(selectedColor = primaryYellow)
                                     )
+                                    Text(text = termLabel, modifier = Modifier.padding(start = 8.dp))
                                 }
                             }
                         }
@@ -906,17 +931,9 @@ fun HomeScreen(
                     confirmButton = {
                         Button(
                             onClick = {
-                                val termLabel = CourseRepository.TERM_MAPPINGS
-                                    .find { it.first == newTimetableTerm }?.second ?: ""
-                                // Auto-fill name from term label if left blank
-                                val name = newTimetableName.trim().ifBlank { termLabel.ifBlank { "Timetable ${timetables.size + 1}" } }
+                                val name = newTimetableName.trim().ifBlank { "Timetable ${timetables.size + 1}" }
                                 val newId = java.util.UUID.randomUUID().toString()
-                                val newTt = Timetable(
-                                    id = newId,
-                                    name = name,
-                                    courses = emptyList(),
-                                    term = newTimetableTerm
-                                )
+                                val newTt = Timetable(id = newId, name = name, term = newTimetableTerm, courses = emptyList())
                                 AppState.timetables.add(newTt)
                                 AppState.activeTimetableId.value = newId
                                 AppState.scheduledCourses.clear()
@@ -932,11 +949,7 @@ fun HomeScreen(
                         ) { Text("Create", fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = {
-                        TextButton(onClick = {
-                            showAddTimetableDialog = false
-                            newTimetableName = ""
-                            newTimetableTerm = "1261"
-                        }) {
+                        TextButton(onClick = { showAddTimetableDialog = false; newTimetableName = ""; newTimetableTerm = "1261" }) {
                             Text("Cancel", color = Color.Gray)
                         }
                     }
@@ -945,191 +958,138 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            when {
-                // Still waiting for Firebase — show nothing to avoid flicker
-                isFirstLoad -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = primaryYellow)
+            if (scheduledCourses.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "No Courses Added",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Add courses to see your weekly schedule",
+                        fontSize = 16.sp,
+                        color = Color(0xFF666666),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Button(
+                        onClick = onNavigateToCourses,
+                        modifier = Modifier.fillMaxWidth(0.8f).height(52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryYellow,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Text("Add Courses", fontSize = 17.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-
-                // New user (or all timetables deleted) — force them to create one
-                timetables.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No Timetable Yet",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Tap '+ Create Timetable' below to create your first timetable and choose a term.",
-                            fontSize = 15.sp,
-                            color = Color(0xFF666666),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Button(
-                            onClick = { showAddTimetableDialog = true },
-                            modifier = Modifier.fillMaxWidth(0.7f).height(52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryYellow,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Create Timetable", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-
-                // Active timetable exists but has no term — prompt to create a proper one
-                timetables.find { it.id == activeTimetableId }?.term.isNullOrBlank() -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No Timetable Yet",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Tap '+ Create Timetable' below to create your first timetable and choose a term.",
-                            fontSize = 15.sp,
-                            color = Color(0xFF666666),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Button(
-                            onClick = { showAddTimetableDialog = true },
-                            modifier = Modifier.fillMaxWidth(0.7f).height(52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryYellow,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Create Timetable", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-
-                // Timetable exists but has no courses yet
-                scheduledCourses.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "No Courses Added",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Add courses to see your weekly schedule",
-                            fontSize = 16.sp,
-                            color = Color(0xFF666666),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(40.dp))
-                        Button(
-                            onClick = onNavigateToCourses,
-                            modifier = Modifier.fillMaxWidth(0.8f).height(52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryYellow,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text("Add Courses", fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-
-                // Has courses — show the timetable grid
-                else ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(2.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                    ) {
-                        TimetableView(
-                            courses = scheduledCourses,
-                            courseColors = courseColors,
-                            onRemoveCourse = { courseToRemove ->
-                                coroutineScope.launch {
-                                    AppState.scheduledCourses.remove(courseToRemove)
-                                    CourseRepository.saveUserSchedule(AppState.scheduledCourses)
+            } else {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    TimetableView(
+                        courses = scheduledCourses,
+                        courseColors = courseColors,
+                        onRemoveCourse = { courseToRemove ->
+                            coroutineScope.launch {
+                                AppState.scheduledCourses.removeAll { it.code == courseToRemove.code }
+                                val id = AppState.activeTimetableId.value
+                                if (id != null) {
+                                    val idx = AppState.timetables.indexOfFirst { it.id == id }
+                                    if (idx >= 0) {
+                                        AppState.timetables[idx] = AppState.timetables[idx].copy(
+                                            courses = AppState.scheduledCourses.toList()
+                                        )
+                                    }
                                 }
+                                CourseRepository.saveAllTimetables(
+                                    AppState.timetables.toList(),
+                                    AppState.activeTimetableId.value
+                                )
                             }
-                        )
-                    }
+                        }
+                    )
+                }
             }
         }
     }
 }
 
-/** Represents one overlapping time window on a specific day column. */
 private data class ConflictSpan(
-    val day: String,
-    val overlapStart: Float,   // fractional hours, e.g. 10.5 = 10:30
-    val overlapEnd: Float
+    val dayIndex: Int,
+    val startHourFloat: Float,
+    val endHourFloat: Float
 )
 
-/**
- * Returns one ConflictSpan per overlapping pair per shared day.
- * The box covers the full union: min(a.start, b.start) → max(a.end, b.end),
- * i.e. from the earlier start to the later end of the two courses.
- */
-private fun findConflictSpans(courses: List<Course>): List<ConflictSpan> {
+private fun findConflictSpans(courses: List<Course>, days: List<String>): List<ConflictSpan> {
     val spans = mutableListOf<ConflictSpan>()
-    for (i in courses.indices) {
-        for (j in i + 1 until courses.size) {
-            val a = courses[i]
-            val b = courses[j]
-            val sharedDays = a.section.days.intersect(b.section.days.toSet())
-            if (sharedDays.isEmpty()) continue
-            val aStart = a.section.startTime.toFloat()
-            val aEnd   = a.section.endTime.toFloat()
-            val bStart = b.section.startTime.toFloat()
-            val bEnd   = b.section.endTime.toFloat()
-            // Only create a span if they actually overlap in time
-            if (aStart < bEnd && bStart < aEnd) {
-                val unionStart = minOf(aStart, bStart)
-                val unionEnd   = maxOf(aEnd,   bEnd)
-                sharedDays.forEach { day -> spans += ConflictSpan(day, unionStart, unionEnd) }
+
+    days.forEachIndexed { dayIndex, day ->
+        val meetings = courses
+            .filter { it.section.days.contains(day) }
+            .map {
+                Triple(
+                    it.section.startTime.toFloat(),
+                    it.section.endTime.toFloat(),
+                    it.code
+                )
+            }
+            .sortedBy { it.first }
+
+        for (i in meetings.indices) {
+            for (j in i + 1 until meetings.size) {
+                val a = meetings[i]
+                val b = meetings[j]
+                val overlapStart = maxOf(a.first, b.first)
+                val overlapEnd = minOf(a.second, b.second)
+                if (overlapEnd > overlapStart) {
+                    spans.add(
+                        ConflictSpan(
+                            dayIndex = dayIndex,
+                            startHourFloat = overlapStart,
+                            endHourFloat = overlapEnd
+                        )
+                    )
+                }
             }
         }
     }
+
     return spans
+}
+
+private fun hasTimeConflict(courses: List<Course>): Boolean {
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+    days.forEach { day ->
+        val meetings = courses
+            .filter { it.section.days.contains(day) }
+            .map { it.section.startTime.toFloat() to it.section.endTime.toFloat() }
+            .sortedBy { it.first }
+
+        for (i in meetings.indices) {
+            for (j in i + 1 until meetings.size) {
+                val overlapStart = maxOf(meetings[i].first, meetings[j].first)
+                val overlapEnd = minOf(meetings[i].second, meetings[j].second)
+                if (overlapEnd > overlapStart) return true
+            }
+        }
+    }
+    return false
 }
 
 @Composable
@@ -1143,10 +1103,9 @@ fun TimetableView(
     val endHour = 23
     val hourHeight = 60.dp
     val primaryYellow = Color(0xFFFFD700)
+    val conflictRed = Color(0xFFE53935)
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
-
-    // Compute exact overlapping time windows for each conflicting pair
-    val conflictSpans = remember(courses) { findConflictSpans(courses) }
+    val conflictSpans = remember(courses) { findConflictSpans(courses, days) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1215,11 +1174,6 @@ fun TimetableView(
                                 val blockHeight = (durationHours * hourHeight.value).dp
                                 val color = courseColors[course.code] ?: primaryYellow
 
-                                val courseIsConflicting = conflictSpans.any { span ->
-                                    span.day == dayStr &&
-                                            course.section.startTime.toFloat() < span.overlapEnd &&
-                                            course.section.endTime.toFloat() > span.overlapStart
-                                }
                                 Card(
                                     modifier = Modifier
                                         .offset(x = columnWidth * dayIdx + (columnWidth * 0.04f), y = topOffset)
@@ -1228,80 +1182,35 @@ fun TimetableView(
                                         .padding(vertical = 2.dp),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = CardDefaults.cardColors(containerColor = color),
-                                    elevation = CardDefaults.cardElevation(if (courseIsConflicting) 6.dp else 2.dp),
-                                    border = if (courseIsConflicting)
-                                        androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFD32F2F))
-                                    else null,
+                                    elevation = CardDefaults.cardElevation(2.dp),
                                     onClick = { selectedCourse = course }
                                 ) {
                                     Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.Top,
+                                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                                        verticalArrangement = Arrangement.Center,
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        // Red stripe at the top of conflicting cards
-                                        if (courseIsConflicting) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(4.dp)
-                                                    .background(
-                                                        Color(0xFFD32F2F),
-                                                        RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
-                                                    )
-                                            )
-                                        }
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(4.dp),
-                                            verticalArrangement = Arrangement.Center,
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(course.code, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, textAlign = TextAlign.Center)
-                                            Text(course.section.component, fontSize = 11.sp, color = Color.Black.copy(alpha = 0.8f), maxLines = 1, textAlign = TextAlign.Center)
-                                            Text("${course.section.startTime}-${course.section.endTime}", fontSize = 10.sp, color = Color.Black.copy(alpha = 0.6f), textAlign = TextAlign.Center)
-                                        }
+                                        Text(course.code, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, textAlign = TextAlign.Center)
+                                        Text(course.section.component, fontSize = 11.sp, color = Color.Black.copy(alpha = 0.8f), maxLines = 1, textAlign = TextAlign.Center)
+                                        Text("${course.section.startTime}-${course.section.endTime}", fontSize = 10.sp, color = Color.Black.copy(alpha = 0.6f), textAlign = TextAlign.Center)
                                     }
                                 }
                             }
                         }
 
-                        // ── Conflict overlay boxes ────────────────────────────
-                        // One red box per conflict span, covering exactly the
-                        // overlapping time window (max of starts → min of ends).
+                        // Draw conflict overlays on top so they remain visible.
                         conflictSpans.forEach { span ->
-                            val dayIdx = days.indexOf(span.day)
-                            if (dayIdx < 0) return@forEach
-                            val topOffset = ((span.overlapStart - startHour) * hourHeight.value).dp
-                            val boxHeight = ((span.overlapEnd - span.overlapStart) * hourHeight.value).dp
+                            val topOffset = ((span.startHourFloat - startHour) * hourHeight.value).dp
+                            val blockHeight = ((span.endHourFloat - span.startHourFloat) * hourHeight.value).dp
+
                             Box(
                                 modifier = Modifier
-                                    .offset(x = columnWidth * dayIdx, y = topOffset)
-                                    .width(columnWidth)
-                                    .height(boxHeight)
-                                    // Solid vivid red background so it punches through course cards
-                                    .background(Color(0xCCD32F2F), RoundedCornerShape(6.dp))
-                                    .border(2.5.dp, Color(0xFFB71C1C), RoundedCornerShape(6.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Text(
-                                        "⚠️",
-                                        fontSize = 16.sp
-                                    )
-                                    Text(
-                                        "CONFLICT",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            }
+                                    .offset(x = columnWidth * span.dayIndex + (columnWidth * 0.04f), y = topOffset)
+                                    .width(columnWidth * 0.92f)
+                                    .height(blockHeight)
+                                    .border(2.dp, conflictRed, RoundedCornerShape(10.dp))
+                                    .background(conflictRed.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                            )
                         }
                     }
                 }
@@ -1310,11 +1219,6 @@ fun TimetableView(
 
         // Course detail dialog
         selectedCourse?.let { course ->
-            val isConflict = conflictSpans.any { span ->
-                course.section.days.contains(span.day) &&
-                        course.section.startTime.toFloat() < span.overlapEnd &&
-                        course.section.endTime.toFloat() > span.overlapStart  // overlaps with the union window
-            }
             AlertDialog(
                 onDismissRequest = { selectedCourse = null },
                 title = { Text("${course.code} – ${course.section.component}") },
@@ -1324,32 +1228,6 @@ fun TimetableView(
                         Text("Time: ${course.section.days.joinToString(", ")} ${course.section.startTime}–${course.section.endTime}")
                         Text("Location: ${course.section.location}")
                         Text("Units: ${course.units}")
-                        if (isConflict) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFD32F2F), RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("⚠️", fontSize = 20.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        "Time Conflict Detected",
-                                        fontSize = 13.sp,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        "This course overlaps with another in your schedule.",
-                                        fontSize = 12.sp,
-                                        color = Color.White.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-                        }
                     }
                 },
                 confirmButton = {

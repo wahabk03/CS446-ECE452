@@ -324,7 +324,21 @@ fun AIScreen(
                     onClick = {
                         AppState.scheduledCourses.clear()
                         AppState.scheduledCourses.addAll(schedule)
-                        coroutineScope.launch { CourseRepository.saveUserSchedule(schedule) }
+                        coroutineScope.launch {
+                            val activeId = AppState.activeTimetableId.value
+                            if (activeId != null) {
+                                val idx = AppState.timetables.indexOfFirst { it.id == activeId }
+                                if (idx >= 0) {
+                                    AppState.timetables[idx] = AppState.timetables[idx].copy(
+                                        courses = AppState.scheduledCourses.toList()
+                                    )
+                                }
+                            }
+                            CourseRepository.saveAllTimetables(
+                                AppState.timetables.toList(),
+                                AppState.activeTimetableId.value
+                            )
+                        }
                         showScheduleDialog = false
                         showAppliedDialog = true
                     },

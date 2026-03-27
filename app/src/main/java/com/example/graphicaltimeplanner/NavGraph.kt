@@ -43,7 +43,7 @@ fun NavGraph(
 
         composable("home") {
             HomeScreen(
-                onNavigateToTimetable = { navController.navigate("timetable") },
+                onNavigateToTimetable = { navController.navigate("home") },
                 onNavigateToAssistant = { navController.navigate("preference") },
                 onNavigateToCourses   = { navController.navigate("courses") },
                 onNavigateToChatbot   = { navController.navigate("chatbot") },
@@ -56,21 +56,7 @@ fun NavGraph(
             )
         }
 
-        composable("timetable") {
-            PlannerScreen(onBack = { navController.popBackStack() })
-        }
-
-        // Legacy GenerateScreen kept in case it is still used elsewhere
-        composable("assistant") {
-            GenerateScreen(
-                onBack = { navController.popBackStack() },
-                onNavigateToTimetable = {
-                    navController.navigate("timetable") { popUpTo("home") }
-                }
-            )
-        }
-
-        // New Preference screen
+        // Preference screen
         composable("preference") {
             AIScreen(
                 onViewProfile   = { navController.navigate("profile") },
