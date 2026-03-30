@@ -466,6 +466,125 @@ object CourseRepository {
             Pair(emptyMap(), emptyList())
         }
     }
+
+    /**
+     * Refresh saved courses with current data from the courses collection.
+     * Returns the updated course list with current times/locations.
+     */
+    suspend fun refreshCoursesFromDb(savedCourses: List<Course>): List<Course> {
+        val updated = mutableListOf<Course>()
+        val grouped = savedCourses.groupBy { course ->
+            val subject = course.code.split(" ").firstOrNull() ?: ""
+            Pair(course.term, subject)
+        }
+
+        for ((key, courses) in grouped) {
+            val (term, subject) = key
+            if (subject.isBlank()) {
+                updated.addAll(courses)
+                continue
+            }
+            try {
+                val currentCourses = getCourses(term, subject)
+                for (saved in courses) {
+                    val current = currentCourses.find {
+                        it.code == saved.code && it.section.classNumber == saved.section.classNumber
+                    }
+                    // Use current version if found, otherwise keep saved (may be cancelled)
+                    updated.add(current ?: saved)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing $subject $term", e)
+                updated.addAll(courses)
+            }
+        }
+        return updated
+    }
+
+    // ── Topic subscription helpers ─────────────────────────────────────────
+
+    fun courseToTopicName(course: Course): String {
+        val parts = course.code.split(" ")
+        val subject = parts[0]
+        val catalog = parts.getOrElse(1) { "" }
+        return "course_${course.term}_${subject}_${catalog}"
+    }
+
+    // ── In-app change detection ────────────────────────────────────────────
+
+    suspend fun detectChanges(savedCourses: List<Course>): List<CourseChange> {
+        val changes = mutableListOf<CourseChange>()
+        if (savedCourses.isEmpty()) return changes
+
+        // Group by (term, subject) to batch Firestore queries
+        val grouped = savedCourses.groupBy { course ->
+            val subject = course.code.split(" ").firstOrNull() ?: ""
+            Pair(course.term, subject)
+        }
+
+        for ((key, courses) in grouped) {
+            val (term, subject) = key
+            if (subject.isBlank()) continue
+            try {
+                val currentCourses = getCourses(term, subject)
+
+                for (saved in courses) {
+                    // Find matching section by classNumber
+                    val current = currentCourses.find {
+                        it.code == saved.code && it.section.classNumber == saved.section.classNumber
+                    }
+
+                    if (current == null) {
+                        changes.add(CourseChange(
+                            saved.code, saved.section.component,
+                            ChangeType.SECTION_CANCELLED,
+                            "${saved.code} ${saved.section.component} appears to be cancelled or removed"
+                        ))
+                        continue
+                    }
+
+                    // Check time changes
+                    if (current.section.startTime != saved.section.startTime ||
+                        current.section.endTime != saved.section.endTime ||
+                        current.section.days != saved.section.days) {
+                        val oldTime = "${saved.section.days.joinToString("")} ${saved.section.startTime}-${saved.section.endTime}"
+                        val newTime = "${current.section.days.joinToString("")} ${current.section.startTime}-${current.section.endTime}"
+                        changes.add(CourseChange(
+                            saved.code, saved.section.component,
+                            ChangeType.TIME_CHANGED,
+                            "${saved.code} ${saved.section.component}: Time changed from $oldTime to $newTime"
+                        ))
+                    }
+
+                    // Check location changes
+                    if (current.section.location != saved.section.location &&
+                        current.section.location.isNotBlank()) {
+                        changes.add(CourseChange(
+                            saved.code, saved.section.component,
+                            ChangeType.LOCATION_CHANGED,
+                            "${saved.code} ${saved.section.component}: Location changed from ${saved.section.location} to ${current.section.location}"
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking changes for $subject $term", e)
+            }
+        }
+        return changes
+    }
+}
+
+data class CourseChange(
+    val courseCode: String,
+    val sectionComponent: String,
+    val changeType: ChangeType,
+    val details: String
+)
+
+enum class ChangeType {
+    TIME_CHANGED,
+    LOCATION_CHANGED,
+    SECTION_CANCELLED
 }
 
 object TimeParser {

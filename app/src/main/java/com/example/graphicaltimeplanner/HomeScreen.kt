@@ -41,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +63,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.drawBehind
@@ -290,6 +292,15 @@ fun HomeScreen(
         }
     }
 
+    // Course change detection state
+    var courseChanges by remember { mutableStateOf<List<CourseChange>>(emptyList()) }
+    var showChangesCard by remember { mutableStateOf(false) }
+    var isUpdatingCourses by remember { mutableStateOf(false) }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* granted or not, in-app alerts work regardless */ }
+
     // Timetable dropdown state
     var showTimetableDropdown by remember { mutableStateOf(false) }
     var showAddTimetableDialog by remember { mutableStateOf(false) }
@@ -336,6 +347,34 @@ fun HomeScreen(
             AppState.scheduledCourses.addAll(defaultTimetable.courses)
         }
         hasLoadedTimetables = true
+
+        // Subscribe to FCM topics for all courses across all timetables
+        val allTopics = AppState.timetables
+            .flatMap { it.courses }
+            .map { CourseRepository.courseToTopicName(it) }
+            .distinct()
+        allTopics.forEach {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic(it)
+        }
+
+        // Request notification permission on Android 13+
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        // Detect course changes (in-app sync)
+        try {
+            val allCourses = AppState.timetables
+                .flatMap { it.courses }
+                .distinctBy { "${it.code}_${it.section.classNumber}" }
+            val changes = CourseRepository.detectChanges(allCourses)
+            if (changes.isNotEmpty()) {
+                courseChanges = changes
+                showChangesCard = true
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("HomeScreen", "Error checking course changes", e)
+        }
     }
 
     // Save active timetable back to Firebase whenever courses change
@@ -657,6 +696,90 @@ fun HomeScreen(
 
                 TextButton(onClick = onLogout) {
                     Text("Logout", color = Color.Gray, fontSize = 15.sp)
+                }
+            }
+
+            // Course changes notification card
+            if (showChangesCard && courseChanges.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Course Updates Detected",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color(0xFFE65100)
+                            )
+                            TextButton(onClick = { showChangesCard = false }) {
+                                Text("Dismiss", color = Color.Gray, fontSize = 13.sp)
+                            }
+                        }
+                        courseChanges.forEach { change ->
+                            Text(
+                                text = change.details,
+                                fontSize = 13.sp,
+                                color = Color(0xFF555555),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                isUpdatingCourses = true
+                                coroutineScope.launch {
+                                    try {
+                                        // Refresh courses in all timetables
+                                        val updatedTimetables = AppState.timetables.map { tt ->
+                                            val refreshed = CourseRepository.refreshCoursesFromDb(tt.courses)
+                                            tt.copy(courses = refreshed)
+                                        }
+                                        AppState.timetables.clear()
+                                        AppState.timetables.addAll(updatedTimetables)
+
+                                        // Update active schedule
+                                        val activeId = AppState.activeTimetableId.value
+                                        val activeCourses = updatedTimetables.find { it.id == activeId }?.courses ?: emptyList()
+                                        AppState.scheduledCourses.clear()
+                                        AppState.scheduledCourses.addAll(activeCourses)
+
+                                        // Save to Firestore
+                                        CourseRepository.saveAllTimetables(updatedTimetables, activeId)
+
+                                        showChangesCard = false
+                                        courseChanges = emptyList()
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("HomeScreen", "Error updating courses", e)
+                                    } finally {
+                                        isUpdatingCourses = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE65100),
+                                contentColor = Color.White
+                            ),
+                            enabled = !isUpdatingCourses
+                        ) {
+                            if (isUpdatingCourses) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Update Schedule", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
                 }
             }
 
