@@ -5,15 +5,17 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,14 +26,15 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Person
@@ -77,13 +80,9 @@ fun ChatbotScreen(
     onNavigateToTimetable: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var inputValue by remember { mutableStateOf("") }
     var attachedFileUri by remember { mutableStateOf<Uri?>(null) }
     var attachedFileName by remember { mutableStateOf<String?>(null) }
-    var isWaitingForAgent by remember { mutableStateOf(false) }
-    var showRedirectButton by remember { mutableStateOf(false) }
-    var redirectButtonCountdownProgress by remember { mutableFloatStateOf(1f) }
     
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -94,37 +93,18 @@ fun ChatbotScreen(
         }
     }
     
-    var messages by remember { mutableStateOf(emptyList<ChatMessage>()) }
-    var sessionId by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(showRedirectButton) {
-        if (!showRedirectButton) {
-            redirectButtonCountdownProgress = 1f
-            return@LaunchedEffect
-        }
-
-        val totalDurationMs = 10_000L
-        val stepMs = 50L
-        val startTime = System.currentTimeMillis()
-
-        while (showRedirectButton) {
-            val elapsed = System.currentTimeMillis() - startTime
-            val remaining = (totalDurationMs - elapsed).coerceAtLeast(0L)
-            redirectButtonCountdownProgress = remaining.toFloat() / totalDurationMs.toFloat()
-
-            if (remaining <= 0L) break
-            delay(stepMs)
-        }
-    }
-
     LaunchedEffect(ChatStateManager.activeSession?.id) {
         val session = ChatStateManager.activeSession
         if (session != null) {
-            sessionId = session.id
-            messages = session.messages
+            ChatStateManager.sessionId = session.id
+            if (!ChatStateManager.isWaitingForAgent || ChatStateManager.messages.isEmpty()) {
+                ChatStateManager.messages = session.messages
+            }
         } else {
-            sessionId = null
-            messages = emptyList()
+            ChatStateManager.sessionId = null
+            if (!ChatStateManager.isWaitingForAgent) {
+                ChatStateManager.messages = emptyList()
+            }
         }
     }
 
@@ -242,12 +222,12 @@ Column(
             }
             
             IconButton(onClick = onHistoryClick) {
-                Icon(Icons.Default.List, contentDescription = "History", tint = Color.Gray)
+                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = Color.Gray)
             }
         }
 
         // Chat Messages Area
-        if (messages.isEmpty()) {
+        if (ChatStateManager.messages.isEmpty()) {
             // Centered initial state
             Column(
                 modifier = Modifier
@@ -268,6 +248,15 @@ Column(
             }
         } else {
             // Chat Messages List
+            val displayMessages = if (
+                ChatStateManager.isWaitingForAgent &&
+                ChatStateManager.messages.lastOrNull()?.content != "typing..."
+            ) {
+                ChatStateManager.messages + ChatMessage("assistant", "typing...")
+            } else {
+                ChatStateManager.messages
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -275,7 +264,7 @@ Column(
                     .padding(horizontal = 16.dp),
                 reverseLayout = true
             ) {
-            items(messages.reversed()) { msg ->
+            items(displayMessages.reversed()) { msg ->
                 ChatBubble(message = msg, primaryYellow = primaryYellow)
             }
         }
@@ -304,7 +293,7 @@ Column(
         }
 
         // Action popup button
-        if (showRedirectButton) {
+        if (ChatStateManager.showRedirectButton) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -312,47 +301,12 @@ Column(
             ) {
                 Button(
                     onClick = {
-                        showRedirectButton = false
+                        ChatStateManager.showRedirectButton = false
                         onNavigateToTimetable()
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .drawWithContent {
-                            drawContent()
-                            val progress = redirectButtonCountdownProgress.coerceIn(0f, 1f)
-                            if (progress <= 0f) return@drawWithContent
-
-                            val strokeWidth = 3.dp.toPx()
-                            val corner = 24.dp.toPx()
-                            val inset = strokeWidth / 2f
-
-                            val roundedRectPath = Path().apply {
-                                addRoundRect(
-                                    RoundRect(
-                                        left = inset,
-                                        top = inset,
-                                        right = size.width - inset,
-                                        bottom = size.height - inset,
-                                        cornerRadius = CornerRadius(corner, corner)
-                                    )
-                                )
-                            }
-
-                            val pathMeasure = PathMeasure().apply {
-                                setPath(roundedRectPath, false)
-                            }
-
-                            val segmentPath = Path()
-                            val segmentStop = pathMeasure.length * progress
-                            pathMeasure.getSegment(0f, segmentStop, segmentPath, true)
-
-                            drawPath(
-                                path = segmentPath,
-                                color = Color(0xFF26A69A),
-                                style = Stroke(width = strokeWidth)
-                            )
-                        },
+                        .height(48.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFE0F2F1),
                         contentColor = Color(0xFF00695C)
@@ -397,26 +351,26 @@ Column(
                     onClick = {
                         if (inputValue.isNotBlank() || attachedFileUri != null) {
                             // Add user message
-                            val currentMsgs = messages + ChatMessage("user", inputValue, attachedFileName)
-                            messages = currentMsgs
+                            val currentMsgs = ChatStateManager.messages + ChatMessage("user", inputValue, attachedFileName)
+                            ChatStateManager.messages = currentMsgs
                             val userMsg = inputValue
                             val fileUriCopy = attachedFileUri
                             val fileNameCopy = attachedFileName
                             inputValue = ""
                             attachedFileUri = null
                             attachedFileName = null
-                            isWaitingForAgent = true
+                            ChatStateManager.isWaitingForAgent = true
                             
                             // Save user message initially
-                            val currentSessionId = sessionId
-                            coroutineScope.launch {
+                            val currentSessionId = ChatStateManager.sessionId
+                            ChatStateManager.appScope.launch {
                                 var idToSave = currentSessionId
                                 var isNewSession = false
                                 if (idToSave == null) {
                                     isNewSession = true
                                     val newSession = ChatRepository.createChatSession()
                                     idToSave = newSession.id
-                                    sessionId = idToSave
+                                    ChatStateManager.sessionId = idToSave
                                     ChatStateManager.activeSession = newSession.copy(messages = currentMsgs)
                                 } else {
                                     ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = currentMsgs)
@@ -432,9 +386,6 @@ Column(
                                     }
                                 }
                                 
-                                // Show loading text
-                                messages = currentMsgs + ChatMessage("assistant", "typing...")
-                                
                                 // Fetch from Agent
                                 val agentResponse = AgentApi.sendMessage(
                                     context = context,
@@ -445,26 +396,25 @@ Column(
                                 )
                                 
                                 val newMsgs = currentMsgs + ChatMessage("assistant", agentResponse.response)
-                                isWaitingForAgent = false
-                                messages = newMsgs
+                                ChatStateManager.isWaitingForAgent = false
+                                ChatStateManager.messages = newMsgs
                                 ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
                                 ChatRepository.saveChatMessages(idToSave!!, newMsgs)
 
                                 // Trigger redirect button if the AI called show_timetable_button tool
                                 if (agentResponse.showButton) {
-                                    showRedirectButton = true
-                                    delay(10000L) // Show for 10 seconds
-                                    showRedirectButton = false
+                                    ChatStateManager.showRedirectButton = true
+                                    ChatStateManager.redirectButtonCountdownProgress = 1f
                                 }
                             }
                         }
                     },
-                    enabled = (inputValue.isNotBlank() || attachedFileUri != null) && !isWaitingForAgent
+                    enabled = (inputValue.isNotBlank() || attachedFileUri != null) && !ChatStateManager.isWaitingForAgent
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Send,
+                        imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send Message",
-                        tint = if ((inputValue.isNotBlank() || attachedFileUri != null) && !isWaitingForAgent) colorResource(R.color.uw_gold_lvl4) else Color.Gray
+                        tint = if ((inputValue.isNotBlank() || attachedFileUri != null) && !ChatStateManager.isWaitingForAgent) colorResource(R.color.uw_gold_lvl4) else Color.Gray
                     )
                 }
             }
@@ -512,11 +462,7 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
                 }
             } else if (isAI) {
                 Box(modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp)) {
-                    Text(
-                        text = message.content,
-                        fontSize = 15.sp,
-                        color = Color.Black
-                    )
+                    MarkdownMessageText(message.content)
                 }
             } else {
                 Card(
@@ -542,4 +488,113 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
             }
         }
     }
+}
+
+@Composable
+private fun MarkdownMessageText(markdown: String) {
+    val blocks = remember(markdown) { markdown.split("```") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        blocks.forEachIndexed { idx, block ->
+            if (block.isBlank()) return@forEachIndexed
+
+            if (idx % 2 == 1) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF8F8F8), RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = block.trimEnd(),
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF333333)
+                    )
+                }
+            } else {
+                block.lines().forEach { rawLine ->
+                    val line = rawLine.trimEnd()
+                    when {
+                        line.startsWith("### ") -> Text(
+                            text = line.removePrefix("### "),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        line.startsWith("## ") -> Text(
+                            text = line.removePrefix("## "),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        line.startsWith("# ") -> Text(
+                            text = line.removePrefix("# "),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        line.startsWith("- ") -> Text(
+                            text = buildAnnotatedString {
+                                append("• ")
+                                appendInlineMarkdown(line.removePrefix("- "))
+                            },
+                            fontSize = 15.sp,
+                            color = Color.Black
+                        )
+                        line.isBlank() -> Spacer(modifier = Modifier.height(2.dp))
+                        else -> Text(
+                            text = buildAnnotatedString { appendInlineMarkdown(line) },
+                            fontSize = 15.sp,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendInlineMarkdown(source: String) {
+    var i = 0
+    var bold = false
+    var code = false
+    val buf = StringBuilder()
+
+    fun flushBuffer() {
+        if (buf.isEmpty()) return
+        val text = buf.toString()
+        buf.clear()
+        pushStyle(
+            SpanStyle(
+                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+                fontFamily = if (code) FontFamily.Monospace else FontFamily.Default,
+                background = if (code) Color(0xFFF0F0F0) else Color.Transparent
+            )
+        )
+        append(text)
+        pop()
+    }
+
+    while (i < source.length) {
+        val nextTwo = if (i + 1 < source.length) source.substring(i, i + 2) else ""
+        when {
+            nextTwo == "**" -> {
+                flushBuffer()
+                bold = !bold
+                i += 2
+            }
+            source[i] == '`' -> {
+                flushBuffer()
+                code = !code
+                i += 1
+            }
+            else -> {
+                buf.append(source[i])
+                i += 1
+            }
+        }
+    }
+    flushBuffer()
 }
