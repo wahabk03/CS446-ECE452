@@ -272,6 +272,27 @@ object CourseRepository {
         }
     }
 
+    /** Load available majors from Firestore collection `majors`. */
+    suspend fun getMajors(): List<Major> {
+        return try {
+            val snapshot = db.collection("major_graduation_requirement").get().await()
+            Log.d(TAG, "getMajors: fetched ${snapshot.documents.size} documents from 'majors'")
+            if (snapshot.documents.isNotEmpty()) {
+                Log.d(TAG, "getMajors: first doc id=${snapshot.documents[0].id}, data=${snapshot.documents[0].data}")
+            }
+            snapshot.documents.mapNotNull { doc ->
+                val name = doc.getString("major") ?: run {
+                    Log.w(TAG, "getMajors: doc ${doc.id} missing 'major' field, available fields: ${doc.data?.keys}")
+                    return@mapNotNull null
+                }
+                Major(slug = doc.id, name = name)
+            }.sortedBy { it.name }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading majors", e)
+            emptyList()
+        }
+    }
+
     /**
      * Load advisor mappings from Firestore collection `advisors`.
      * Expected fields: programSlug/program_slug, email, name, yearLevel/year_level, isFallback/is_fallback, faculty.
@@ -321,25 +342,25 @@ object CourseRepository {
 
         val exactByYear = advisors.firstOrNull {
             !it.isFallback && it.programSlug.equals(programSlug, ignoreCase = true) &&
-                it.yearLevel.equals(desiredYear, ignoreCase = true)
+                    it.yearLevel.equals(desiredYear, ignoreCase = true)
         }
         if (exactByYear != null) return exactByYear
 
         val exactAllYears = advisors.firstOrNull {
             !it.isFallback && it.programSlug.equals(programSlug, ignoreCase = true) &&
-                it.yearLevel.equals("all", ignoreCase = true)
+                    it.yearLevel.equals("all", ignoreCase = true)
         }
         if (exactAllYears != null) return exactAllYears
 
         val fallbackByYear = advisors.firstOrNull {
             it.isFallback && it.faculty.equals(faculty, ignoreCase = true) &&
-                it.yearLevel.equals(desiredYear, ignoreCase = true)
+                    it.yearLevel.equals(desiredYear, ignoreCase = true)
         }
         if (fallbackByYear != null) return fallbackByYear
 
         return advisors.firstOrNull {
             it.isFallback && it.faculty.equals(faculty, ignoreCase = true) &&
-                it.yearLevel.equals("all", ignoreCase = true)
+                    it.yearLevel.equals("all", ignoreCase = true)
         }
     }
 

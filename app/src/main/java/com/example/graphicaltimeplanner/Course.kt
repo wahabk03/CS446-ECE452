@@ -45,6 +45,11 @@ data class Program(
     val degreeType: String   // e.g. "BCS"
 )
 
+data class Major(
+    val slug: String,  // document ID
+    val name: String   // e.g. "Computer Science (Bachelor of Mathematics - Honours)"
+)
+
 data class Advisor(
     val programSlug: String,  // matches program slug or faculty key
     val email: String,

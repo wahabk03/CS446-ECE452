@@ -83,6 +83,15 @@ fun ProfileScreen(
     var programSuccess by remember { mutableStateOf<String?>(null) }
     var programError by remember { mutableStateOf<String?>(null) }
 
+    // ── Major state ────────────────────────────────────────────────────────────
+    var majors by remember { mutableStateOf<List<Major>>(emptyList()) }
+    var selectedMajor by remember { mutableStateOf<Major?>(null) }
+    var majorSearchQuery by remember { mutableStateOf("") }
+    var majorDropdownExpanded by remember { mutableStateOf(false) }
+    var majorSaving by remember { mutableStateOf(false) }
+    var majorSuccess by remember { mutableStateOf<String?>(null) }
+    var majorError by remember { mutableStateOf<String?>(null) }
+
     // ── Notifications state ───────────────────────────────────────────────────
     var notifLectureChanges by remember { mutableStateOf(true) }
     var notifNewSections by remember { mutableStateOf(true) }
@@ -91,6 +100,7 @@ fun ProfileScreen(
     // Load saved preferences from Firestore
     LaunchedEffect(Unit) {
         programs = CourseRepository.getPrograms()
+        majors = CourseRepository.getMajors()
         CourseRepository.getAdvisors()
         val profile = CourseRepository.getUserExtendedProfile()
         profile["notifLectureChanges"]?.let { notifLectureChanges = it as Boolean }
@@ -99,6 +109,13 @@ fun ProfileScreen(
         val programSlug = profile["program"] as? String
         if (programSlug != null) {
             selectedProgram = programs.find { it.slug == programSlug }
+        }
+        val majorSlug = profile["major"] as? String
+        val majorName = profile["majorName"] as? String
+        if (majorName != null) {
+            selectedMajor = majors.find { it.name == majorName }
+        } else if (majorSlug != null) {
+            selectedMajor = majors.find { it.slug == majorSlug }
         }
         val yearLevel = profile["yearLevel"] as? Int
         val yearLabel = profile["yearLevelLabel"] as? String
@@ -529,7 +546,172 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── 3. Change Password ────────────────────────────────────────────
+            // ── 3. Major ──────────────────────────────────────────────────────
+            SectionHeader(icon = Icons.Default.Info, title = "Major (${majors.size} loaded)")
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    FieldLabel("Major")
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Major search field
+                    OutlinedTextField(
+                        value = majorSearchQuery,
+                        onValueChange = {
+                            majorSearchQuery = it
+                            majorDropdownExpanded = true
+                            majorSuccess = null
+                        },
+                        placeholder = {
+                            Text(
+                                selectedMajor?.name ?: "Type to search majors...",
+                                color = if (selectedMajor != null) Color(0xFF444444) else Color.LightGray
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    majorDropdownExpanded = true
+                                }
+                            },
+                        singleLine = true,
+                        enabled = !majorSaving,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = fieldBackground,
+                            focusedContainerColor = fieldBackground,
+                            focusedBorderColor = primaryYellow,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    // Major results list — shows when focused, filters as you type
+                    if (majorDropdownExpanded && majors.isNotEmpty()) {
+                        val filtered = if (majorSearchQuery.isBlank()) {
+                            majors.take(10)
+                        } else {
+                            majors.filter {
+                                it.name.contains(majorSearchQuery, ignoreCase = true)
+                            }.take(8)
+                        }
+                        if (filtered.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(4.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                            ) {
+                                Column(
+                                    modifier = Modifier.verticalScroll(rememberScrollState())
+                                ) {
+                                    filtered.forEach { major ->
+                                        Text(
+                                            major.name,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    selectedMajor = major
+                                                    majorSearchQuery = ""
+                                                    majorDropdownExpanded = false
+                                                    majorSuccess = null
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (majorSearchQuery.isNotBlank()) {
+                            Text(
+                                "No majors found for \"$majorSearchQuery\"",
+                                fontSize = 13.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Show selected major
+                    if (selectedMajor != null && !majorDropdownExpanded) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Selected: ${selectedMajor!!.name}",
+                            fontSize = 13.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    majorError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                    majorSuccess?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = Color(0xFF2E7D32), fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (selectedMajor == null) {
+                                majorError = "Please select a major"
+                                return@Button
+                            }
+                            majorSaving = true
+                            majorError = null
+                            majorSuccess = null
+                            coroutineScope.launch {
+                                try {
+                                    CourseRepository.saveUserExtendedProfile(
+                                        mapOf(
+                                            "major" to selectedMajor!!.slug,
+                                            "majorName" to selectedMajor!!.name
+                                        )
+                                    )
+                                    majorSuccess = "Major saved!"
+                                } catch (e: Exception) {
+                                    majorError = e.localizedMessage ?: "Failed to save"
+                                } finally {
+                                    majorSaving = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryYellow,
+                            contentColor = Color.Black
+                        ),
+                        enabled = !majorSaving
+                    ) {
+                        if (majorSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 3.dp)
+                        } else {
+                            Text("Save Major", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 4. Change Password ────────────────────────────────────────────
             SectionHeader(icon = Icons.Default.Lock, title = "Change Password")
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -656,7 +838,7 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── 3. Notifications ──────────────────────────────────────────────
+            // ── 5. Notifications ──────────────────────────────────────────────
             SectionHeader(icon = Icons.Default.Notifications, title = "Notifications")
             Spacer(modifier = Modifier.height(10.dp))
 
