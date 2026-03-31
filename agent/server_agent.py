@@ -6,7 +6,7 @@ import tempfile
 import uuid
 import re
 from agent import Agent
-from tools import read_uploaded_file, browse_online, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
+from tools import read_uploaded_file, browse_online, browse_uwflow, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
 from firebase_admin import firestore
 from typing import Optional, Tuple
 
@@ -134,6 +134,9 @@ def _tool_progress_message(uid: str, func_name: str, args: dict) -> str:
     if func_name == "browse_online":
         query = args.get("query", "")
         return f"Browsing online for \"{query}\""
+    if func_name == "browse_uwflow":
+        query = args.get("query", "")
+        return f"Browsing UW Flow for \"{query}\""
     if func_name == "create_timetable":
         title = args.get("title", "New timetable")
         term = _format_term_label(args.get("term", "Unknown term"))
@@ -194,6 +197,8 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
             try:
                 if func_name == "browse_online":
                     tool_response = browse_online(**args)
+                elif func_name == "browse_uwflow":
+                    tool_response = browse_uwflow(**args)
                 elif func_name == "query_database_readonly":
                     tool_response = query_database_readonly(**args)
                 elif func_name == "create_timetable":
@@ -435,6 +440,8 @@ def chat_stream():
                     try:
                         if func_name == "browse_online":
                             tool_response = browse_online(**args)
+                        elif func_name == "browse_uwflow":
+                            tool_response = browse_uwflow(**args)
                         elif func_name == "query_database_readonly":
                             tool_response = query_database_readonly(**args)
                         elif func_name == "create_timetable":

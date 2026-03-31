@@ -72,6 +72,43 @@ def browse_online(query: str) -> str:
     except Exception as e:
         return f"Error searching online: {e}"
 
+
+def browse_uwflow(query: str) -> str:
+    """
+    Searches UW Flow specifically for course/professor review information.
+    Returns concise results with title, link, and snippet.
+    """
+    print(f"Browsing UW Flow for: {query}")
+    if not SERPAPI_API_KEY or SERPAPI_API_KEY == "your_serpapi_key_here":
+        return "Error: SERPAPI_API_KEY is not configured."
+
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "google",
+        "q": f"site:uwflow.com {query}",
+        "api_key": SERPAPI_API_KEY
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        results = response.json()
+
+        organic_results = results.get("organic_results", [])[:5]
+        if not organic_results:
+            return "No UW Flow results found."
+
+        lines = []
+        for i, res in enumerate(organic_results, start=1):
+            title = res.get("title", "Untitled")
+            link = res.get("link", "")
+            snippet = res.get("snippet", "No snippet available.")
+            lines.append(f"{i}. {title}\nURL: {link}\n{snippet}")
+
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"Error searching UW Flow: {e}"
+
 def query_database_readonly(uid: str, query_type: str, target_id: str = None) -> dict:
     """
     Accesses the database with read-only permissions.
@@ -484,6 +521,23 @@ TOOLS_SCHEMA = [
                     "query": {
                         "type": "string",
                         "description": "The search query to look up on the web"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse_uwflow",
+            "description": "Searches UW Flow specifically for course and professor reviews, ratings, and related pages.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Course/professor search phrase, such as 'CS 341 reviews' or 'Trevor Brown UW Flow'"
                     }
                 },
                 "required": ["query"]

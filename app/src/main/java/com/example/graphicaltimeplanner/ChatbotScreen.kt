@@ -2,6 +2,7 @@ package com.example.graphicaltimeplanner
 
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ExpandLess
@@ -31,7 +33,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -574,7 +578,10 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
     val isToolStatus = message.role == "tool_status"
     val isAI = message.role == "assistant" || message.role == "agent" || isToolStatus
     val isTyping = message.content == "typing..."
+    val isCopyEligible = message.role == "user" || message.role == "assistant" || message.role == "agent"
     val bubbleColor = if (isAI) Color.Transparent else primaryYellow.copy(alpha = 0.2f)
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -640,6 +647,23 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
                         )
                     }
                 }
+            }
+        }
+
+        if (isCopyEligible && !isTyping && message.content.isNotBlank()) {
+            IconButton(
+                onClick = {
+                    clipboardManager.setText(AnnotatedString(message.content))
+                    Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Copy message",
+                    tint = Color(0xFF757575),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
@@ -735,8 +759,27 @@ private fun MarkdownMessageText(markdown: String) {
                     )
                 }
             } else {
-                block.lines().forEach { rawLine ->
-                    val line = rawLine.trimEnd()
+                val lines = block.lines()
+                var i = 0
+                while (i < lines.size) {
+                    val line = lines[i].trimEnd()
+
+                    if (
+                        line.trim().startsWith("|") &&
+                        i + 1 < lines.size &&
+                        isMarkdownTableSeparator(lines[i + 1])
+                    ) {
+                        val header = parseMarkdownTableRow(line)
+                        i += 2
+                        val rows = mutableListOf<List<String>>()
+                        while (i < lines.size && lines[i].trim().startsWith("|")) {
+                            rows.add(parseMarkdownTableRow(lines[i]))
+                            i += 1
+                        }
+                        MarkdownTable(header = header, rows = rows)
+                        continue
+                    }
+
                     when {
                         line.startsWith("### ") -> Text(
                             text = line.removePrefix("### "),
@@ -764,6 +807,10 @@ private fun MarkdownMessageText(markdown: String) {
                             fontSize = 15.sp,
                             color = Color.Black
                         )
+                        line.trim() == "---" || line.trim() == "***" -> HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color(0xFFE0E0E0)
+                        )
                         line.isBlank() -> Spacer(modifier = Modifier.height(2.dp))
                         else -> Text(
                             text = buildAnnotatedString { appendInlineMarkdown(line) },
@@ -771,8 +818,64 @@ private fun MarkdownMessageText(markdown: String) {
                             color = Color.Black
                         )
                     }
+                    i += 1
                 }
             }
+        }
+    }
+}
+
+private fun isMarkdownTableSeparator(line: String): Boolean {
+    val trimmed = line.trim()
+    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return false
+    val columns = trimmed.trim('|').split('|').map { it.trim() }
+    if (columns.isEmpty()) return false
+    return columns.all { col -> col.isNotEmpty() && col.all { ch -> ch == '-' || ch == ':' } }
+}
+
+private fun parseMarkdownTableRow(line: String): List<String> {
+    return line.trim().trim('|').split('|').map { it.trim() }
+}
+
+@Composable
+private fun MarkdownTable(header: List<String>, rows: List<List<String>>) {
+    val columnCount = maxOf(header.size, rows.maxOfOrNull { it.size } ?: 0)
+    if (columnCount == 0) return
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            MarkdownTableRow(cells = header, columnCount = columnCount, isHeader = true)
+            HorizontalDivider(thickness = 1.dp, color = Color(0xFFE0E0E0))
+            rows.forEachIndexed { index, row ->
+                MarkdownTableRow(cells = row, columnCount = columnCount, isHeader = false)
+                if (index < rows.lastIndex) {
+                    HorizontalDivider(thickness = 1.dp, color = Color(0xFFEEEEEE))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTableRow(cells: List<String>, columnCount: Int, isHeader: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        for (columnIndex in 0 until columnCount) {
+            val text = cells.getOrNull(columnIndex).orEmpty()
+            Text(
+                text = buildAnnotatedString { appendInlineMarkdown(text) },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                fontSize = 13.sp,
+                fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+                color = Color(0xFF222222)
+            )
         }
     }
 }
