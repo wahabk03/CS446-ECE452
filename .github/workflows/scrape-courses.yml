@@ -1,0 +1,31 @@
+name: Scrape & Notify Course Updates
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml firebase-admin
+
+      - name: Write service account key
+        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" > parse/serviceAccountKey.json
+
+      - name: Run scraper & send notifications
+        run: python parse/script_populate_db.py

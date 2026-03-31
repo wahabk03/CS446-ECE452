@@ -363,6 +363,11 @@ fun CourseScreen(
                                     AppState.scheduledCourses.removeAll { it.code == group.code }
                                     AppState.scheduledCourses.addAll(newCourses)
 
+                                    // Subscribe to FCM topic for this course
+                                    newCourses.map { CourseRepository.courseToTopicName(it) }.distinct().forEach {
+                                        com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic(it)
+                                    }
+
                                     scope.launch {
                                         val activeId = AppState.activeTimetableId.value
                                         if (activeId != null) {

@@ -1,8 +1,9 @@
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
+from firebase_admin import messaging
 import scrape_schedule
-import time
+import sys
 
 """
 INSTRUCTIONS:
@@ -17,10 +18,13 @@ INSTRUCTIONS:
 
 6. Run this script:
    python parse/script_populate_db.py
+
+   First run (skip notifications to avoid spam):
+   python parse/script_populate_db.py --skip-notify
 """
 
+
 def initialize_firebase():
-    # Fetch the service account key JSON file contents
     try:
         cred = credentials.Certificate('parse/serviceAccountKey.json')
         firebase_admin.initialize_app(cred)
@@ -32,47 +36,110 @@ def initialize_firebase():
         print(f"Error initializing Firebase: {e}")
         exit(1)
 
-def populate_database(db):
+
+def detect_changes(old_data, new_data):
+    """Compare old and new course data, return list of change descriptions."""
+    changes = []
+
+    old_sections = {s.get('class', ''): s for s in old_data.get('sections', []) if s.get('class')}
+    new_sections = {s.get('class', ''): s for s in new_data.get('sections', []) if s.get('class')}
+
+    # Sections removed (cancelled)
+    for class_num, old_sec in old_sections.items():
+        if class_num not in new_sections:
+            changes.append(f"{old_sec.get('component', 'Unknown')} has been cancelled")
+
+    # Sections added
+    for class_num, new_sec in new_sections.items():
+        if class_num not in old_sections:
+            changes.append(f"{new_sec.get('component', 'Unknown')} has been added")
+
+    # Sections changed
+    for class_num in old_sections:
+        if class_num in new_sections:
+            old_sec = old_sections[class_num]
+            new_sec = new_sections[class_num]
+
+            if old_sec.get('time_date') != new_sec.get('time_date'):
+                changes.append(
+                    f"{new_sec.get('component', '')}: Time changed from "
+                    f"{old_sec.get('time_date', 'TBA')} to {new_sec.get('time_date', 'TBA')}"
+                )
+
+            if old_sec.get('location') != new_sec.get('location'):
+                changes.append(
+                    f"{new_sec.get('component', '')}: Location changed from "
+                    f"{old_sec.get('location', 'TBA')} to {new_sec.get('location', 'TBA')}"
+                )
+
+    return changes
+
+
+def send_change_notification(doc_id, course, changes):
+    """Send FCM data message to topic subscribers."""
+    topic = f"course_{doc_id}"
+    course_code = f"{course['subject']} {course['catalog']}"
+    summary = "; ".join(changes[:3])  # Limit to 3 changes for notification body
+
+    message = messaging.Message(
+        data={
+            "type": "course_change",
+            "course_id": doc_id,
+            "course_code": course_code,
+            "change_summary": summary
+        },
+        topic=topic,
+        android=messaging.AndroidConfig(priority="high")
+    )
+
+    try:
+        response = messaging.send(message)
+        print(f"    -> Notification sent for {course_code}: {response}")
+    except Exception as e:
+        print(f"    -> Failed to notify for {course_code}: {e}")
+
+
+def populate_database(db, skip_notify=False):
     print("Fetching all subjects...")
-    # Terms: 1261 (Winter 2026), 1259 (Fall 2025), 1255 (Spring 2025)
-    # Using 1261 for initial subject list
     initial_sess = "1261"
     level = "under"
-    
+
     subjects = scrape_schedule.get_all_subjects(level, initial_sess)
     print(f"Found {len(subjects)} subjects.")
 
-    # List of terms to scrape
     terms_to_scrape = ["1261", "1259", "1255"]
 
-    # Create a batch handler for efficient rights
     batch = db.batch()
     batch_count = 0
-    limit = 500  # Firestore batch limit is 500
+    limit = 500
+    total_changes = 0
 
-    # Terms to scrape: Winter 2026 (1261), Fall 2025 (1259), Spring 2025 (1255)
-    terms_to_scrape = ["1261", "1259", "1255"]
-    
-    # Iterate through all subjects
     for subject in subjects:
         print(f"Processing Subject: {subject}")
-        
-        # Scrape all specified terms
+
         for sess in terms_to_scrape:
-            
             courses = scrape_schedule.get_subject_courses(level, sess, subject)
-            
             if not courses:
                 continue
 
             for course in courses:
-                # Document ID structure: "1261_CS_136" (Term_Subject_Catalog)
                 doc_id = f"{sess}_{course['subject']}_{course['catalog']}"
-                
-                # Add metadata about term
                 course['term'] = sess
                 doc_ref = db.collection('courses').document(doc_id)
-                
+
+                # Check for changes before overwriting
+                if not skip_notify:
+                    try:
+                        old_doc = doc_ref.get()
+                        if old_doc.exists:
+                            changes = detect_changes(old_doc.to_dict(), course)
+                            if changes:
+                                total_changes += len(changes)
+                                print(f"  Changes detected in {doc_id}: {changes}")
+                                send_change_notification(doc_id, course, changes)
+                    except Exception as e:
+                        print(f"  Error checking changes for {doc_id}: {e}")
+
                 batch.set(doc_ref, course)
                 batch_count += 1
 
@@ -82,14 +149,10 @@ def populate_database(db):
                         batch.commit()
                     except Exception as e:
                         print(f"Error committing batch: {e}")
-                    
-                    batch = db.batch() # Start new batch
+                    batch = db.batch()
                     batch_count = 0
-            
-            # Tiny sleep between terms
-            # time.sleep(0.05)
 
-    # Commit any remaining operations
+    # Commit remaining
     if batch_count > 0:
         print(f"Committing final batch of {batch_count}...")
         try:
@@ -97,8 +160,12 @@ def populate_database(db):
         except Exception as e:
             print(f"Error committing final batch: {e}")
 
-    print("Database population complete!")
+    print(f"\nDatabase population complete! {total_changes} changes detected and notified.")
+
 
 if __name__ == "__main__":
     db = initialize_firebase()
-    populate_database(db)
+    skip_notify = "--skip-notify" in sys.argv
+    if skip_notify:
+        print("Skipping notifications (--skip-notify flag)")
+    populate_database(db, skip_notify=skip_notify)

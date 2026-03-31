@@ -27,6 +27,13 @@ object AppState {
     }
 
     fun logout() {
+        // Unsubscribe from all course FCM topics before clearing
+        timetables.flatMap { it.courses }
+            .map { CourseRepository.courseToTopicName(it) }
+            .distinct()
+            .forEach {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
+            }
         scheduledCourses.clear()
         timetables.clear()
         activeTimetableId.value = null
