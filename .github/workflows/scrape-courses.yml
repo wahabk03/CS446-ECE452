@@ -25,7 +25,7 @@ jobs:
         run: pip install requests beautifulsoup4 lxml firebase-admin
 
       - name: Write service account key
-        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" > parse/serviceAccountKey.json
+        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" | base64 --decode > parse/serviceAccountKey.json
 
       - name: Run scraper & send notifications
         run: python parse/script_populate_db.py
