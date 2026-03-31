@@ -268,7 +268,7 @@ fun AIScreen(
                 val maxSearchCount = 5000
 
                 fun generate(idx: Int, current: List<Course>) {
-                    if (results.size >= 5) return
+                    if (results.size >= 50) return
 
                     if (searchCount >= maxSearchCount) return
                     searchCount++
@@ -291,26 +291,36 @@ fun AIScreen(
 
                 generate(0, emptyList())
 
-                // Sort by number of courses (more = better)
-                val sorted = results.sortedByDescending { schedule ->
-                    var score = schedule.size * 100
-                    if (minimizeGaps) {
-                        // Penalise schedules with large gaps per day
-                        val byDay = schedule.flatMap { c -> c.section.days.map { d -> d to c } }
-                            .groupBy({ it.first }, { it.second })
-                        val gapPenalty = byDay.values.sumOf { daySecs ->
-                            if (daySecs.size < 2) 0
-                            else {
-                                val sorted2 = daySecs.sortedBy { it.section.startTime }
-                                sorted2.zipWithNext().sumOf { (a, b) ->
-                                    (b.section.startTime.toFloat() - a.section.endTime.toFloat()).toInt()
+                val uniqueResults = results.distinctBy { schedule ->
+                    schedule
+                        .sortedBy {
+                            "${it.code}|${it.section.component}|${it.section.days.joinToString(",")}|${it.section.startTime}|${it.section.endTime}|${it.section.location}"
+                        }
+                        .joinToString("||") {
+                            "${it.code}|${it.section.component}|${it.section.days.joinToString(",")}|${it.section.startTime}|${it.section.endTime}|${it.section.location}"
+                        }
+                }
+
+                val sorted = uniqueResults
+                    .sortedByDescending { schedule ->
+                        var score = schedule.size * 100
+                        if (minimizeGaps) {
+                            val byDay = schedule.flatMap { c -> c.section.days.map { d -> d to c } }
+                                .groupBy({ it.first }, { it.second })
+                            val gapPenalty = byDay.values.sumOf { daySecs ->
+                                if (daySecs.size < 2) 0
+                                else {
+                                    val sorted2 = daySecs.sortedBy { it.section.startTime }
+                                    sorted2.zipWithNext().sumOf { (a, b) ->
+                                        (b.section.startTime.toFloat() - a.section.endTime.toFloat()).toInt()
+                                    }
                                 }
                             }
+                            score -= gapPenalty
                         }
-                        score -= gapPenalty
+                        score
                     }
-                    score
-                }
+                    .take(5)
 
                 generatedSchedules = sorted
                 currentScheduleIndex = 0
