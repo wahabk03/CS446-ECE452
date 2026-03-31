@@ -28,4 +28,4 @@ jobs:
         run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" | base64 --decode > parse/serviceAccountKey.json
 
       - name: Run scraper & send notifications
-        run: python parse/script_populate_db.py
+        run: python -u parse/script_populate_db.py
