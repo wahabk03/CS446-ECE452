@@ -242,6 +242,120 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
         "show_button": show_button
     }
 
+
+def _parse_email_json(content: str) -> Optional[dict]:
+    text = (content or "").strip()
+    if not text:
+        return None
+
+    # Strip fenced code blocks if model wrapped JSON in markdown.
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 3:
+            text = "\n".join(lines[1:-1]).strip()
+
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+
+    # Fallback: extract first JSON object from mixed text.
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            data = json.loads(text[start:end + 1])
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            return None
+    return None
+
+
+@app.route('/generate_email', methods=['POST'])
+def generate_email():
+    data = request.json or {}
+    issue = (data.get("issue") or "").strip()
+    advisor_name = (data.get("advisor_name") or "Academic Advisor").strip()
+    program_name = (data.get("program_name") or "").strip()
+    year_level = (data.get("year_level") or "").strip()
+    student_name = (data.get("student_name") or "").strip()
+    student_id = (data.get("student_id") or "").strip()
+
+    if not issue:
+        return jsonify({"error": "issue is required"}), 400
+
+    agent = Agent()
+    system_prompt = (
+        "You are an academic-email drafting assistant. Write professional advisor emails that strictly preserve "
+        "the user's intent and facts. You must not invent details, assumptions, timelines, course codes, policy claims, "
+        "or personal information that are not explicitly provided. If information is missing, keep wording generic instead "
+        "of guessing. Output valid JSON only with exactly two keys: subject and body."
+    )
+
+    context_lines = []
+    if program_name:
+        context_lines.append(f"Program: {program_name}")
+    if year_level:
+        context_lines.append(f"Year level: {year_level}")
+    if student_name:
+        context_lines.append(f"Student name: {student_name}")
+    if student_id:
+        context_lines.append(f"Student ID: {student_id}")
+    context_block = "\n".join(context_lines) if context_lines else "No additional profile context provided."
+
+    user_prompt = (
+        f"Advisor name: {advisor_name}\n"
+        f"{context_block}\n\n"
+        f"Issue summary:\n{issue}\n\n"
+        "Hard constraints:\n"
+        "1) Keep semantic fidelity: reflect only what appears in Issue summary and provided context.\n"
+        "2) Do not add any new facts (no fabricated courses, dates, deadlines, medical/personal claims, or prior conversations).\n"
+        "3) If the issue is vague, do not infer specifics; request guidance in general terms.\n"
+        "4) Keep tone polite, concise, and student-appropriate.\n"
+        "5) Include a direct ask for advisor guidance or next steps.\n"
+        "6) Subject must be specific to the issue and under 12 words.\n"
+        "7) Body must be 90-220 words, with greeting, concise context, request, and professional closing.\n"
+        "8) Preserve first-person student voice.\n"
+        "9) Return JSON only.\n"
+        "Example format: {\"subject\":\"...\",\"body\":\"...\"}"
+    )
+
+    try:
+        response_msg = agent.chat([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ])
+        content = response_msg.get("content", "")
+        parsed = _parse_email_json(content)
+
+        if parsed:
+            subject = str(parsed.get("subject", "")).strip()
+            body = str(parsed.get("body", "")).strip()
+            if subject and body:
+                return jsonify({"subject": subject, "body": body}), 200
+
+        # Fallback if model returns non-JSON or incomplete JSON
+        fallback_body = (
+            f"Dear {advisor_name},\n\n"
+            "I hope you are doing well. I am writing to ask for your guidance regarding the following issue:\n\n"
+            f"{issue}\n\n"
+            "I would really appreciate your advice on possible next steps. "
+            "Please let me know if you need any additional information from me.\n\n"
+            "Thank you for your time and support.\n\n"
+            "Best regards,\n"
+            f"{student_name or '[Your Name]'}"
+            + (f"\n{student_id}" if student_id else "\n[Student ID]")
+        )
+        return jsonify({
+            "subject": "Request for Academic Advising Assistance",
+            "body": fallback_body
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json

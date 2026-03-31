@@ -17,11 +17,13 @@ import java.net.URL
 object AgentApi {
     private const val CHAT_STREAM_URL = "http://10.0.2.2:5000/chat_stream"
     private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
+    private const val GENERATE_EMAIL_URL = "http://10.0.2.2:5000/generate_email"
     private const val READ_TIMEOUT_MS = 120000
     private const val CONNECT_TIMEOUT_MS = 30000
     private const val MAX_RETRIES = 2
 
     data class AgentResponse(val response: String, val showButton: Boolean)
+    data class GeneratedEmailResponse(val subject: String, val body: String)
 
     private suspend fun <T> withRetry(block: () -> T): T {
         var attempt = 0
@@ -190,5 +192,72 @@ object AgentApi {
             e.printStackTrace()
         }
         return@withContext "Chat Session"
+    }
+
+    suspend fun generateAdvisorEmail(
+        issue: String,
+        advisorName: String?,
+        programName: String?,
+        yearLevel: String?,
+        studentName: String?,
+        studentId: String?
+    ): GeneratedEmailResponse = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("issue", issue)
+                put("advisor_name", advisorName ?: "")
+                put("program_name", programName ?: "")
+                put("year_level", yearLevel ?: "")
+                put("student_name", studentName ?: "")
+                put("student_id", studentId ?: "")
+            }
+
+            return@withContext withRetry {
+                val url = URL(GENERATE_EMAIL_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                try {
+                    connection.readTimeout = READ_TIMEOUT_MS
+                    connection.connectTimeout = CONNECT_TIMEOUT_MS
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("Connection", "close")
+                    connection.doOutput = true
+
+                    val writer = OutputStreamWriter(connection.outputStream)
+                    writer.write(jsonBody.toString())
+                    writer.flush()
+                    writer.close()
+
+                    val responseCode = connection.responseCode
+                    val responseStr = if (responseCode == HttpURLConnection.HTTP_OK) {
+                        connection.inputStream.bufferedReader().use { it.readText() }
+                    } else {
+                        connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "{}"
+                    }
+                    val jsonObj = JSONObject(responseStr)
+
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        GeneratedEmailResponse(
+                            subject = jsonObj.optString("subject", "Request for Academic Advising Assistance"),
+                            body = jsonObj.optString("body", "")
+                        )
+                    } else {
+                        val err = jsonObj.optString("error", "Unknown error")
+                        GeneratedEmailResponse(
+                            subject = "Request for Academic Advising Assistance",
+                            body = "Error generating email: $err"
+                        )
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext GeneratedEmailResponse(
+                subject = "Request for Academic Advising Assistance",
+                body = "Error generating email: ${e.message}"
+            )
+        }
     }
 }
