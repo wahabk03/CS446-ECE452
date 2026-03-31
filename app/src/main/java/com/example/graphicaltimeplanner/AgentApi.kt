@@ -15,7 +15,7 @@ import java.net.SocketTimeoutException
 import java.net.URL
 
 object AgentApi {
-    private const val BASE_URL = "http://10.0.2.2:5000/chat"
+    private const val CHAT_STREAM_URL = "http://10.0.2.2:5000/chat_stream"
     private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
     private const val READ_TIMEOUT_MS = 120000
     private const val CONNECT_TIMEOUT_MS = 30000
@@ -51,7 +51,8 @@ object AgentApi {
         message: String,
         history: List<ChatMessage>,
         fileUri: Uri?,
-        fileName: String?
+        fileName: String?,
+        onToolEvent: ((String) -> Unit)? = null
     ): AgentResponse = withContext(Dispatchers.IO) {
         try {
             val user = FirebaseAuth.getInstance().currentUser
@@ -66,6 +67,7 @@ object AgentApi {
                 // Wait, AgentScreen.kt already appended it to messages. Let's pass the prior ones.
                 // We'll trust history is proper.
                 for (msg in history) {
+                    if (msg.role == "tool_status") continue
                     val msgObj = JSONObject()
                     msgObj.put("role", msg.role)
                     msgObj.put("content", msg.content ?: "")
@@ -86,7 +88,7 @@ object AgentApi {
             }
 
             return@withContext withRetry {
-                val url = URL(BASE_URL)
+                val url = URL(CHAT_STREAM_URL)
                 val connection = url.openConnection() as HttpURLConnection
                 try {
                     connection.readTimeout = READ_TIMEOUT_MS
@@ -103,10 +105,39 @@ object AgentApi {
 
                     val responseCode = connection.responseCode
                     if (responseCode == HttpURLConnection.HTTP_OK) {
-                        val responseStr = connection.inputStream.bufferedReader().use { it.readText() }
-                        val jsonObj = JSONObject(responseStr)
-                        val responseText = jsonObj.optString("response", "No response")
-                        val showButton = jsonObj.optBoolean("show_button", false)
+                        var responseText = "No response"
+                        var showButton = false
+
+                        connection.inputStream.bufferedReader().use { reader ->
+                            while (true) {
+                                val rawLine = reader.readLine() ?: break
+                                val line = rawLine.trim()
+                                if (line.isEmpty()) continue
+
+                                try {
+                                    val eventObj = JSONObject(line)
+                                    when (eventObj.optString("type")) {
+                                        "tool" -> {
+                                            val toolMessage = eventObj.optString("message", "")
+                                            if (toolMessage.isNotBlank()) {
+                                                onToolEvent?.invoke(toolMessage)
+                                            }
+                                        }
+                                        "final" -> {
+                                            responseText = eventObj.optString("response", responseText)
+                                            showButton = eventObj.optBoolean("show_button", showButton)
+                                        }
+                                        "error" -> {
+                                            val err = eventObj.optString("message", "Unknown streaming error")
+                                            responseText = "Error: $err"
+                                        }
+                                    }
+                                } catch (_: Exception) {
+                                    // Ignore malformed stream lines and continue reading.
+                                }
+                            }
+                        }
+
                         AgentResponse(responseText, showButton)
                     } else {
                         val err = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"

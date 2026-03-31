@@ -4,6 +4,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -11,13 +12,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,17 +36,25 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.TextButton
+import java.util.UUID
 
-data class ChatMessage(val role: String = "", val content: String = "", val attachedFileName: String? = null)
+data class ChatMessage(
+    val role: String = "",
+    val content: String = "",
+    val attachedFileName: String? = null,
+    val thinkingGroupId: String? = null
+)
 
 // Helper function to extract file name from URI
 private fun Uri.getFileName(context: android.content.Context): String {
@@ -106,6 +118,8 @@ fun ChatbotScreen(
                 ChatStateManager.messages = emptyList()
             }
         }
+
+        inputValue = ChatStateManager.getDraftForSession(ChatStateManager.sessionId)
     }
 
     
@@ -222,7 +236,7 @@ Column(
             }
             
             IconButton(onClick = onHistoryClick) {
-                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = Color.Gray)
+                Icon(Icons.Default.History, contentDescription = "Chat History", tint = Color.Gray)
             }
         }
 
@@ -248,13 +262,71 @@ Column(
             }
         } else {
             // Chat Messages List
-            val displayMessages = if (
+            val baseMessages = if (
                 ChatStateManager.isWaitingForAgent &&
                 ChatStateManager.messages.lastOrNull()?.content != "typing..."
             ) {
                 ChatStateManager.messages + ChatMessage("assistant", "typing...")
             } else {
                 ChatStateManager.messages
+            }
+
+            val currentSessionId = ChatStateManager.sessionId
+            val foldVersion = ChatStateManager.thinkingFoldVersion
+
+            val groupIndexes = remember(baseMessages) {
+                val map = mutableMapOf<String, MutableList<Int>>()
+                baseMessages.forEachIndexed { index, msg ->
+                    if (msg.role != "tool_status") return@forEachIndexed
+                    val groupKey = msg.thinkingGroupId ?: "legacy_$index"
+                    map.getOrPut(groupKey) { mutableListOf() }.add(index)
+                }
+                map
+            }
+
+            val displayMessages = remember(baseMessages, groupIndexes, currentSessionId, foldVersion) {
+                buildList {
+                    baseMessages.forEachIndexed { index, msg ->
+                        if (msg.role != "tool_status") {
+                            add(msg)
+                            return@forEachIndexed
+                        }
+
+                        val groupKey = msg.thinkingGroupId ?: "legacy_$index"
+                        val indexes = groupIndexes[groupKey] ?: listOf(index)
+                        val firstIndex = indexes.first()
+                        val lastIndex = indexes.last()
+                        val hiddenThinkingSteps = (indexes.size - 1).coerceAtLeast(0)
+                        val shouldFoldThinking = indexes.size > 1
+                        val isExpanded = ChatStateManager.isThinkingGroupExpanded(currentSessionId, groupKey)
+
+                        if (isExpanded) {
+                            if (shouldFoldThinking && index == firstIndex) {
+                                add(
+                                    ChatMessage(
+                                        role = "tool_fold_control",
+                                        content = "Hide thinking process",
+                                        thinkingGroupId = groupKey
+                                    )
+                                )
+                            }
+                            add(msg)
+                        } else {
+                            if (index == lastIndex) {
+                                if (shouldFoldThinking) {
+                                    add(
+                                        ChatMessage(
+                                            role = "tool_fold_control",
+                                            content = "Show $hiddenThinkingSteps previous thinking steps",
+                                            thinkingGroupId = groupKey
+                                        )
+                                    )
+                                }
+                                add(msg)
+                            }
+                        }
+                    }
+                }
             }
 
             LazyColumn(
@@ -264,10 +336,22 @@ Column(
                     .padding(horizontal = 16.dp),
                 reverseLayout = true
             ) {
-            items(displayMessages.reversed()) { msg ->
-                ChatBubble(message = msg, primaryYellow = primaryYellow)
+                items(displayMessages.reversed()) { msg ->
+                    if (msg.role == "tool_fold_control") {
+                        val groupKey = msg.thinkingGroupId ?: return@items
+                        ThinkingFoldControl(
+                            label = msg.content,
+                            isExpanded = ChatStateManager.isThinkingGroupExpanded(currentSessionId, groupKey),
+                            onClick = {
+                                val current = ChatStateManager.isThinkingGroupExpanded(currentSessionId, groupKey)
+                                ChatStateManager.setThinkingGroupExpanded(currentSessionId, groupKey, !current)
+                            }
+                        )
+                    } else {
+                        ChatBubble(message = msg, primaryYellow = primaryYellow)
+                    }
+                }
             }
-        }
         }
 
         // Selected File Display
@@ -294,30 +378,73 @@ Column(
 
         // Action popup button
         if (ChatStateManager.showRedirectButton) {
+            LaunchedEffect(ChatStateManager.showRedirectButton) {
+                if (ChatStateManager.showRedirectButton) {
+                    val totalSteps = 100
+                    for (step in totalSteps downTo 0) {
+                        if (!ChatStateManager.showRedirectButton) break
+                        ChatStateManager.redirectButtonCountdownProgress = step / totalSteps.toFloat()
+                        delay(80)
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Button(
-                    onClick = {
-                        ChatStateManager.showRedirectButton = false
-                        onNavigateToTimetable()
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE0F2F1),
-                        contentColor = Color(0xFF00695C)
-                    ),
-                    shape = RoundedCornerShape(24.dp)
+                        .height(48.dp)
                 ) {
-                    Text(
-                        text = "View Timetable Change",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    Button(
+                        onClick = {
+                            ChatStateManager.showRedirectButton = false
+                            onNavigateToTimetable()
+                        },
+                        modifier = Modifier
+                            .matchParentSize(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE0F2F1),
+                            contentColor = Color(0xFF00695C)
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Text(
+                            text = "View Timetable Change",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    Canvas(
+                        modifier = Modifier
+                            .matchParentSize()
+                    ) {
+                        val progress = ChatStateManager.redirectButtonCountdownProgress.coerceIn(0f, 1f)
+                        val strokePx = 2.5.dp.toPx()
+                        val inset = strokePx / 2f
+                        val rr = RoundRect(
+                            left = inset,
+                            top = inset,
+                            right = size.width - inset,
+                            bottom = size.height - inset,
+                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                        )
+
+                        val borderPath = Path().apply { addRoundRect(rr) }
+                        val pathMeasure = PathMeasure().apply { setPath(borderPath, false) }
+                        val countdownPath = Path()
+                        pathMeasure.getSegment(0f, pathMeasure.length * progress, countdownPath, true)
+
+                        drawPath(
+                            path = countdownPath,
+                            color = Color(0xFF26A69A),
+                            style = Stroke(width = strokePx)
+                        )
+                    }
                 }
             }
         }
@@ -340,7 +467,10 @@ Column(
                 
                 OutlinedTextField(
                     value = inputValue,
-                    onValueChange = { inputValue = it },
+                    onValueChange = {
+                        inputValue = it
+                        ChatStateManager.setDraftForSession(ChatStateManager.sessionId, it)
+                    },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Ask the agent...") },
                     shape = RoundedCornerShape(24.dp),
@@ -356,6 +486,8 @@ Column(
                             val userMsg = inputValue
                             val fileUriCopy = attachedFileUri
                             val fileNameCopy = attachedFileName
+                            val currentDraftSessionId = ChatStateManager.sessionId
+                            ChatStateManager.clearDraftForSession(currentDraftSessionId)
                             inputValue = ""
                             attachedFileUri = null
                             attachedFileName = null
@@ -387,15 +519,29 @@ Column(
                                 }
                                 
                                 // Fetch from Agent
+                                val thinkingGroupId = UUID.randomUUID().toString()
+                                ChatStateManager.setThinkingGroupExpanded(idToSave, thinkingGroupId, false)
+
                                 val agentResponse = AgentApi.sendMessage(
                                     context = context,
                                     message = userMsg,
                                     history = currentMsgs.dropLast(1), // sending history without the new user msg
                                     fileUri = fileUriCopy,
-                                    fileName = fileNameCopy
+                                    fileName = fileNameCopy,
+                                    onToolEvent = { toolMessage ->
+                                        ChatStateManager.appScope.launch {
+                                            val progressMsgs = ChatStateManager.messages + ChatMessage(
+                                                role = "tool_status",
+                                                content = toolMessage,
+                                                thinkingGroupId = thinkingGroupId
+                                            )
+                                            ChatStateManager.messages = progressMsgs
+                                            ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = progressMsgs)
+                                        }
+                                    }
                                 )
-                                
-                                val newMsgs = currentMsgs + ChatMessage("assistant", agentResponse.response)
+
+                                val newMsgs = ChatStateManager.messages + ChatMessage("assistant", agentResponse.response)
                                 ChatStateManager.isWaitingForAgent = false
                                 ChatStateManager.messages = newMsgs
                                 ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
@@ -425,7 +571,8 @@ Column(
 
 @Composable
 fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
-    val isAI = message.role == "assistant" || message.role == "agent"
+    val isToolStatus = message.role == "tool_status"
+    val isAI = message.role == "assistant" || message.role == "agent" || isToolStatus
     val isTyping = message.content == "typing..."
     val bubbleColor = if (isAI) Color.Transparent else primaryYellow.copy(alpha = 0.2f)
 
@@ -460,6 +607,14 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = primaryYellow, strokeWidth = 2.dp)
                 }
+            } else if (isToolStatus) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    ToolStatusMessageText(message = message.content)
+                }
             } else if (isAI) {
                 Box(modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp)) {
                     MarkdownMessageText(message.content)
@@ -487,6 +642,72 @@ fun ChatBubble(message: ChatMessage, primaryYellow: Color) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ThinkingFoldControl(
+    label: String,
+    isExpanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp, horizontal = 6.dp)
+            .clickable(onClick = onClick),
+        color = Color(0xFFF4F6F7),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start
+        ) {
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (isExpanded) "Collapse thinking process" else "Expand thinking process",
+                tint = Color(0xFF6E6E6E),
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                color = Color(0xFF5F6368)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolStatusMessageText(message: String) {
+    Text(
+        text = buildAnnotatedString { appendToolStatusMessage(message) },
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        color = Color(0xFF616161),
+        fontSize = 13.sp
+    )
+}
+
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendToolStatusMessage(source: String) {
+    var i = 0
+    while (i < source.length) {
+        if (source[i] == '"') {
+            val end = source.indexOf('"', startIndex = i + 1)
+            if (end != -1) {
+                val quoted = source.substring(i, end + 1)
+                pushStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic))
+                append(quoted)
+                pop()
+                i = end + 1
+                continue
+            }
+        }
+        append(source[i])
+        i++
     }
 }
 
