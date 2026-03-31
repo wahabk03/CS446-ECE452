@@ -112,6 +112,10 @@ Best regards,
     )
 }
 
+private fun buildFallbackGeneratedEmail(issue: String): GeneratedEmail {
+    return buildEmailFromTemplate(issue)
+}
+
 // ─── AdvisorScreen ────────────────────────────────────────────────────────────
 
 @Composable
@@ -136,6 +140,8 @@ fun AdvisorScreen(
     var issueText by remember { mutableStateOf("") }
     var generatedEmail by remember { mutableStateOf<GeneratedEmail?>(null) }
     var showResultDialog by remember { mutableStateOf(false) }
+    var isGeneratingEmail by remember { mutableStateOf(false) }
+    var emailGenerationError by remember { mutableStateOf<String?>(null) }
     // Editable fields in the review dialog
     var editFromEmail by remember { mutableStateOf("student@uwaterloo.ca") }
     var editToEmail by remember { mutableStateOf("advisor@uwaterloo.ca") }
@@ -228,7 +234,13 @@ fun AdvisorScreen(
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(
-                            onClick = { showComposeDialog = false; issueText = "" },
+                            onClick = {
+                                if (!isGeneratingEmail) {
+                                    showComposeDialog = false
+                                    issueText = ""
+                                    emailGenerationError = null
+                                }
+                            },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
@@ -283,34 +295,86 @@ fun AdvisorScreen(
                     Button(
                         onClick = {
                             if (issueText.isNotBlank()) {
-                                val result = buildEmailFromTemplate(issueText)
-                                generatedEmail = result
-                                editSubject = result.subject
-                                editBody = result.body
-                                // Pre-fill from email with the signed-in user's email
-                                val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
-                                if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
-                                if (!matchedAdvisor?.email.isNullOrBlank()) editToEmail = matchedAdvisor!!.email
-                                showComposeDialog = false
-                                issueText = ""
-                                showResultDialog = true
+                                emailGenerationError = null
+                                isGeneratingEmail = true
+                                val issueSnapshot = issueText
+
+                                coroutineScope.launch {
+                                    try {
+                                        val result = AgentApi.generateAdvisorEmail(
+                                            issue = issueSnapshot,
+                                            advisorName = matchedAdvisor?.name,
+                                            programName = profileProgram?.name,
+                                            yearLevel = profileYearLabel,
+                                            studentName = displayName.ifBlank { null },
+                                            studentId = null
+                                        )
+
+                                        val generated = GeneratedEmail(
+                                            subject = result.subject.ifBlank { "Request for Academic Advising Assistance" },
+                                            body = result.body.ifBlank { buildFallbackGeneratedEmail(issueSnapshot).body }
+                                        )
+
+                                        generatedEmail = generated
+                                        editSubject = generated.subject
+                                        editBody = generated.body
+
+                                        val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+                                        if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
+                                        if (!matchedAdvisor?.email.isNullOrBlank()) editToEmail = matchedAdvisor!!.email
+
+                                        showComposeDialog = false
+                                        issueText = ""
+                                        showResultDialog = true
+                                    } catch (e: Exception) {
+                                        emailGenerationError = e.localizedMessage ?: "Failed to generate email draft"
+                                        val fallback = buildFallbackGeneratedEmail(issueSnapshot)
+                                        generatedEmail = fallback
+                                        editSubject = fallback.subject
+                                        editBody = fallback.body
+                                        showComposeDialog = false
+                                        showResultDialog = true
+                                    } finally {
+                                        isGeneratingEmail = false
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = issueText.isNotBlank(),
+                        enabled = issueText.isNotBlank() && !isGeneratingEmail,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = primaryYellow.copy(alpha = if (issueText.isNotBlank()) 1f else 0.5f),
+                            containerColor = primaryYellow.copy(alpha = if (issueText.isNotBlank() && !isGeneratingEmail) 1f else 0.5f),
                             contentColor = Color.Black,
                             disabledContainerColor = primaryYellow.copy(alpha = 0.4f),
                             disabledContentColor = Color.Black.copy(alpha = 0.5f)
                         )
                     ) {
-                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Generate Email with AI", fontWeight = FontWeight.SemiBold)
+                        if (isGeneratingEmail) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.Black
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Generating...", fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Generate Email with AI", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    emailGenerationError?.let { err ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = err,
+                            fontSize = 12.sp,
+                            color = Color(0xFFB3261E),
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }

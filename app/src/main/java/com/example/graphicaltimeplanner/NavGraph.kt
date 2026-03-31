@@ -94,13 +94,17 @@ fun NavGraph(
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 },
                 onViewProfile     = { navController.navigate("profile") },
-                onNavigateToHome  = {
-                    navController.navigate("home") { popUpTo("chatbot") { inclusive = true } }
-                },
+                onNavigateToHome  = { navController.navigate("home") },
                 onNavigateToCourses = { navController.navigate("courses") },
                 onNavigateToAi = { navController.navigate("preference") },
-                onNavigateToAdvisor = { navController.navigate("advisor") }
+                onNavigateToAdvisor = { navController.navigate("advisor") },
+                onHistoryClick = { navController.navigate("chatHistory") },
+                onNavigateToTimetable = { navController.navigate("home") }
             )
+        }
+
+        composable("chatHistory") {
+            ChatHistoryScreen(onBack = { navController.popBackStack() })
         }
 
         composable("profile") {
