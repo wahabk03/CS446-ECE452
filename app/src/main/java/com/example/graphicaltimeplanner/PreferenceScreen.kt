@@ -139,9 +139,9 @@ fun AIScreen(
     // Pinned sections: key = "$code||$componentType" → specific Section chosen by user
     val selectedSections    = AppState.selectedSections
 
-    // Cache of ALL courses ever fetched across subjects during this session.
+    // Course data cache — lives in AppState so it survives navigation.
     // Key = "$term||$subject" so switching timetable term invalidates stale entries.
-    val courseCache = remember { mutableStateMapOf<String, List<Course>>() }
+    val courseCache = AppState.courseCache
 
     // ── Generate state ────────────────────────────────────────────────────────
     var isGenerating           by remember { mutableStateOf(false) }
@@ -150,6 +150,14 @@ fun AIScreen(
     var generatedSchedules     by remember { mutableStateOf<List<List<Course>>>(emptyList()) }
     var currentScheduleIndex   by remember { mutableStateOf(0) }
     var showScheduleDialog     by remember { mutableStateOf(false) }
+    // Courses that are impossible to satisfy under the current early-class cutoff.
+    // Non-empty → the earlyConflictDialog is shown instead of the schedule.
+    var earlyConflictCourses    by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showEarlyConflictDialog by remember { mutableStateOf(false) }
+    // Courses that are impossible to satisfy under the current max-daily-hours cap.
+    // Non-empty → the dailyHoursConflictDialog is shown instead of the schedule.
+    var dailyHoursConflictCourses    by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showDailyHoursConflictDialog by remember { mutableStateOf(false) }
 
     // Resolve which subject to fetch:
     //  - If the search box is blank → use the selected tab (selectedSubject)
@@ -228,24 +236,18 @@ fun AIScreen(
     //  3. Hard conflict constraint: no two sections may overlap in time on the
     //     same day.
     //
-    // CHROMOSOME ENCODING
-    //  Each gene[i] is an index into geneGroups[i].sections.
-    //  geneGroups has exactly one entry per (courseCode × componentType) pair, so
-    //  a chromosome of length N fully specifies one section for every required
-    //  component of every selected course.
-    //
-    // REPAIR OPERATOR
-    //  After plain decoding, if any gene's chosen section conflicts with an
-    //  already-placed section, the repair operator tries every other section in
-    //  that gene group before giving up.  This dramatically increases the chance
-    //  that all components are placed, turning infeasible chromosomes feasible.
+    // ALGORITHM OVERVIEW — Genetic Algorithm with repair operator
+    //  A population of chromosomes (IntArray) evolves over 200 generations.
+    //  Each gene encodes which candidate section to use for one (course × component)
+    //  slot.  A repair operator fixes hard-constraint violations at decode time so
+    //  that evolution pressure naturally moves the population toward fully-feasible
+    //  schedules.  The top 5 distinct feasible individuals from the final population
+    //  are returned to the user, ranked by the soft-preference score.
     //
     // FITNESS
-    //  • +10 000 per fully-placed gene (partial placement of a course still scores)
-    //  • +50 000 bonus when ALL selected courses are completely placed
-    //  • –gap penalty (hours of dead time between classes on the same day)
-    //  • –early-start penalty (classes before 9 AM when avoid-early is on)
-    //  • –cluster penalty (classes on non-preferred days when cluster-days is on)
+    //  • +10 000 per successfully placed gene (after repair)
+    //  • +50 000 bonus when ALL genes are placed (fully feasible)
+    //  • +scheduleScore() soft preference reward (gap, early, cluster)
     //
     fun generateTimetable() {
         if (selectedCourseCodes.isEmpty()) return
@@ -257,8 +259,14 @@ fun AIScreen(
 
         coroutineScope.launch {
             try {
-                // Capture preference snapshot for use inside the coroutine
-                val cutoff       = earlyClassCutoff          // hour threshold (e.g. 10 → before 10:00 is "early")
+                // Snapshot ALL preferences before entering the coroutine body.
+                // These are Compose-state delegates; reading them off the main thread
+                // is unsafe, and snapshotting them ensures consistency across the
+                // entire GA run even if the user changes a toggle mid-generation.
+                val avoidEarly    = avoidEarlyClasses
+                val cutoff        = earlyClassCutoff
+                val minGaps       = minimizeGaps
+                val maxHours      = maxDailyHours
                 val preferredDays = clusterDays.filter { it.value }.keys.toSet()
 
                 // ── Build one slot per (courseCode × componentType) ──────────────
@@ -274,7 +282,7 @@ fun AIScreen(
                 fun prefScore(c: Course): Int {
                     var s = 0
                     // Penalise sections whose start time is before the cutoff hour
-                    if (avoidEarlyClasses && c.section.startTime.hour < cutoff) {
+                    if (avoidEarly && c.section.startTime.hour < cutoff) {
                         // Stronger penalty the earlier it is
                         s += (cutoff - c.section.startTime.hour) * 40
                     }
@@ -309,13 +317,57 @@ fun AIScreen(
                         }
                         Slot(code, compType, candidates)
                     }
-                    // Pinned slots have exactly 1 candidate — place them first so the
-                    // DFS commits to them immediately (fail-first + reduces search space).
+                    // Pinned slots have exactly 1 candidate — sort them first so the
+                    // GA repair operator commits to them immediately (reduces search space).
                     .sortedWith(compareBy({ it.candidates.size }, { it.courseCode }, { it.componentType }))
 
                 if (slots.isEmpty()) {
                     isGenerating = false
                     showNoResultsDialog = true
+                    return@launch
+                }
+
+                // ── Early-class hard-constraint pre-check ────────────────────────
+                // If avoidEarlyClasses is on, verify that every slot has at least
+                // one candidate that starts at or after the cutoff hour.
+                // A slot with ONLY early candidates means the preference is impossible
+                // to satisfy for that course component — we must tell the user rather
+                // than silently showing a violating schedule.
+                if (avoidEarly) {
+                    val impossibleCourses = slots
+                        .filter { slot ->
+                            slot.candidates.all { it.section.startTime.hour < cutoff }
+                        }
+                        .map { it.courseCode }
+                        .distinct()
+
+                    if (impossibleCourses.isNotEmpty()) {
+                        isGenerating = false
+                        earlyConflictCourses = impossibleCourses
+                        showEarlyConflictDialog = true
+                        return@launch
+                    }
+                }
+
+                // ── Max-daily-hours hard-constraint pre-check ────────────────────
+                // A single section whose own duration already exceeds maxHours can
+                // NEVER be placed on any day without breaching the cap — regardless
+                // of what other courses are chosen.  Catch this before the GA runs.
+                val dailyHoursImpossible = slots
+                    .filter { slot ->
+                        // All candidates for this slot are individually too long
+                        slot.candidates.all { c ->
+                            val dur = c.section.endTime.toFloat() - c.section.startTime.toFloat()
+                            dur > maxHours
+                        }
+                    }
+                    .map { it.courseCode }
+                    .distinct()
+
+                if (dailyHoursImpossible.isNotEmpty()) {
+                    isGenerating = false
+                    dailyHoursConflictCourses = dailyHoursImpossible
+                    showDailyHoursConflictDialog = true
                     return@launch
                 }
 
@@ -345,7 +397,7 @@ fun AIScreen(
                     // ① Minimize gaps: subtract total idle minutes between consecutive
                     //    classes on the same day (only positive gaps — no overlap penalty
                     //    here since overlap is already a hard constraint).
-                    if (minimizeGaps && placed.size > 1) {
+                    if (minGaps && placed.size > 1) {
                         val byDay = placed
                             .flatMap { c -> c.section.days.map { d -> d to c } }
                             .groupBy({ it.first }, { it.second })
@@ -365,7 +417,7 @@ fun AIScreen(
 
                     // ② Avoid early classes: penalise every section that starts before
                     //    the user's chosen cutoff hour, proportional to how early it is.
-                    if (avoidEarlyClasses) {
+                    if (avoidEarly) {
                         placed.forEach { c ->
                             val startHour = c.section.startTime.hour
                             if (startHour < cutoff) {
@@ -387,91 +439,254 @@ fun AIScreen(
                     return score
                 }
 
-                // ── Iterative DFS with backtracking ──────────────────────────────
+                // ── Genetic Algorithm ─────────────────────────────────────────────
                 //
-                // Each stack frame holds:
-                //   slotIdx   — which slot we are currently deciding
-                //   candIdx   — index of the next candidate to try in that slot
-                //   placed    — sections chosen so far (immutable snapshot)
-                //   dailyHours — accumulated class hours per day
+                // CHROMOSOME ENCODING
+                //  A chromosome is an IntArray of length = slots.size.
+                //  chromosome[i] is an index into slots[i].candidates.
+                //  Decoding a chromosome produces one candidate section per slot
+                //  (before the repair operator is applied).
                 //
-                // A candidate is accepted only when:
-                //   1. No time overlap with any already-placed section.
-                //   2. Adding it does not push any of its days over maxDailyHours.
+                // REPAIR OPERATOR
+                //  After plain decoding we walk the genes in order. If a chosen
+                //  section conflicts with an already-placed section (time overlap) or
+                //  would push any day over maxDailyHours, we scan the other candidates
+                //  in that slot for a valid replacement. If none exists the gene is
+                //  left as-is but the section is not placed — the fitness function
+                //  penalises missing genes heavily so evolution pressures the
+                //  population toward feasible chromosomes.
                 //
-                // We collect up to MAX_RESULTS complete schedules, then rank them
-                // by scheduleScore and return the top ones to the user.
+                // FITNESS  (higher is better)
+                //  • +10 000 per gene successfully placed after repair
+                //  • +50 000 bonus when every gene is placed (fully feasible schedule)
+                //  • +scheduleScore(placed) — the soft preference score from above
+                //    (gap penalty, early-class penalty, cluster-day penalty)
+                //
+                // GA PARAMETERS
+                //  POPULATION_SIZE = 120   — large enough for diversity
+                //  GENERATIONS     = 200   — enough for convergence on typical inputs
+                //  ELITE_COUNT     = 6     — top individuals survive unchanged
+                //  TOURNAMENT_K    = 5     — tournament selection pressure
+                //  CROSSOVER_RATE  = 0.85  — high crossover for exploration
+                //  MUTATION_RATE   = 0.08  — per-gene flip probability
+                //  MAX_RESULTS     = 5     — distinct feasible schedules returned
 
-                val MAX_RESULTS = 5
+                val POPULATION_SIZE = 120
+                val GENERATIONS     = 200
+                val ELITE_COUNT     = 6
+                val TOURNAMENT_K    = 5
+                val CROSSOVER_RATE  = 0.85
+                val MUTATION_RATE   = 0.08
+                val MAX_RESULTS     = 5
 
-                data class Frame(
-                    val slotIdx: Int,
-                    var candIdx: Int,
-                    val placed: List<Course>,
-                    val dailyHours: Map<String, Float>
-                )
+                // Use nanoTime so every invocation — even with identical course
+                // selections and preferences — produces a different random stream,
+                // which is what makes the GA non-deterministic across runs.
+                val rng = java.util.Random(System.nanoTime())
 
-                val results = mutableListOf<List<Course>>()
-                val stack   = ArrayDeque<Frame>()
-                stack.addLast(Frame(0, 0, emptyList(), emptyMap()))
+                // ── Decode + repair a chromosome into a list of placed sections ──
+                // IMPORTANT: works on an internal copy so the caller's chromosome
+                // is never mutated.  Mutating in-place during fitness evaluation
+                // destroys population diversity and makes the GA deterministic.
+                fun decode(chromosome: IntArray): List<Course> {
+                    val genes      = chromosome.copyOf()   // ← work on a copy; never mutate caller's array
+                    val placed     = mutableListOf<Course>()
+                    val dailyHours = mutableMapOf<String, Float>()
 
-                while (stack.isNotEmpty() && results.size < MAX_RESULTS) {
-                    val frame = stack.last()
+                    for (i in slots.indices) {
+                        val slot       = slots[i]
+                        val startGene  = genes[i].coerceIn(0, slot.candidates.lastIndex)
+                        var placed_sec: Course? = null
 
-                    // All slots filled → complete, valid schedule
-                    if (frame.slotIdx == slots.size) {
-                        results.add(frame.placed)
-                        stack.removeLast()
-                        continue
-                    }
+                        // Try startGene first, then scan remaining candidates for a valid one
+                        val tryOrder = (startGene until slot.candidates.size) +
+                                (0 until startGene)
 
-                    val slot = slots[frame.slotIdx]
-                    var advanced = false
+                        for (ci in tryOrder) {
+                            val candidate = slot.candidates[ci]
 
-                    while (frame.candIdx < slot.candidates.size) {
-                        val candidate = slot.candidates[frame.candIdx]
-                        frame.candIdx++
+                            // Hard constraint 1 — no time overlap
+                            if (conflictsWith(candidate, placed)) continue
 
-                        // Hard constraint 1 — no time overlap
-                        if (conflictsWith(candidate, frame.placed)) continue
+                            // Hard constraint 2 — daily hour cap
+                            val dur = sectionDuration(candidate)
+                            val exceedsDaily = candidate.section.days.any { day ->
+                                (dailyHours[day] ?: 0f) + dur > maxHours
+                            }
+                            if (exceedsDaily) continue
 
-                        // Hard constraint 2 — daily hour cap
-                        val dur = sectionDuration(candidate)
-                        val exceedsDaily = candidate.section.days.any { day ->
-                            (frame.dailyHours[day] ?: 0f) + dur > maxDailyHours
+                            // Valid placement found — record repaired index in local copy only
+                            placed_sec = candidate
+                            genes[i] = ci
+                            break
                         }
-                        if (exceedsDaily) continue
 
-                        // Valid — push next level
-                        val newHours = frame.dailyHours.toMutableMap()
-                        candidate.section.days.forEach { day ->
-                            newHours[day] = (newHours[day] ?: 0f) + dur
+                        if (placed_sec != null) {
+                            placed.add(placed_sec)
+                            placed_sec.section.days.forEach { day ->
+                                dailyHours[day] = (dailyHours[day] ?: 0f) + sectionDuration(placed_sec)
+                            }
                         }
-                        stack.addLast(Frame(frame.slotIdx + 1, 0, frame.placed + candidate, newHours))
-                        advanced = true
-                        break
                     }
-
-                    if (!advanced) stack.removeLast()  // backtrack
+                    return placed
                 }
 
-                // ── Deduplicate and rank ──────────────────────────────────────────
+                // ── Fitness function ──────────────────────────────────────────────
+                fun fitness(chromosome: IntArray): Int {
+                    val placed = decode(chromosome)
+                    val placedCount = placed.size
+                    val fullyFeasible = placedCount == slots.size
+                    return placedCount * 10_000 +
+                            (if (fullyFeasible) 50_000 else 0) +
+                            scheduleScore(placed)
+                }
+
+                // ── Random chromosome factory ─────────────────────────────────────
+                fun randomChromosome(): IntArray = IntArray(slots.size) { i ->
+                    if (slots[i].candidates.isEmpty()) 0
+                    else rng.nextInt(slots[i].candidates.size)
+                }
+
+                // ── Tournament selection ──────────────────────────────────────────
+                fun tournamentSelect(
+                    population: List<IntArray>,
+                    fitnesses: IntArray
+                ): IntArray {
+                    var best = rng.nextInt(population.size)
+                    repeat(TOURNAMENT_K - 1) {
+                        val challenger = rng.nextInt(population.size)
+                        if (fitnesses[challenger] > fitnesses[best]) best = challenger
+                    }
+                    return population[best].copyOf()
+                }
+
+                // ── Uniform crossover ─────────────────────────────────────────────
+                fun crossover(parentA: IntArray, parentB: IntArray): IntArray {
+                    if (rng.nextDouble() > CROSSOVER_RATE) return parentA.copyOf()
+                    return IntArray(slots.size) { i ->
+                        if (rng.nextBoolean()) parentA[i] else parentB[i]
+                    }
+                }
+
+                // ── Per-gene mutation (random reset) ──────────────────────────────
+                fun mutate(chromosome: IntArray) {
+                    for (i in slots.indices) {
+                        if (rng.nextDouble() < MUTATION_RATE && slots[i].candidates.size > 1) {
+                            chromosome[i] = rng.nextInt(slots[i].candidates.size)
+                        }
+                    }
+                }
+
+                // ── Initialise population — fully random so every run explores a
+                //    different region of the search space (true GA non-determinism).
+                //    The soft-preference sort on candidates and the repair operator
+                //    steer evolution toward good schedules without biasing the seed.
+                var population = MutableList(POPULATION_SIZE) { randomChromosome() }
+
+                var fitnesses = IntArray(POPULATION_SIZE) { fitness(population[it]) }
+
+                // ── Main GA loop ──────────────────────────────────────────────────
+                repeat(GENERATIONS) {
+                    // Elitism — carry top ELITE_COUNT individuals unchanged
+                    val eliteIndices = fitnesses
+                        .withIndex()
+                        .sortedByDescending { it.value }
+                        .take(ELITE_COUNT)
+                        .map { it.index }
+
+                    val nextPop = MutableList(POPULATION_SIZE) { randomChromosome() }
+                    eliteIndices.forEachIndexed { pos, origIdx ->
+                        nextPop[pos] = population[origIdx].copyOf()
+                    }
+
+                    // Fill the rest through selection + crossover + mutation
+                    for (j in ELITE_COUNT until POPULATION_SIZE) {
+                        val child = crossover(
+                            tournamentSelect(population, fitnesses),
+                            tournamentSelect(population, fitnesses)
+                        )
+                        mutate(child)
+                        nextPop[j] = child
+                    }
+
+                    population = nextPop
+                    fitnesses  = IntArray(POPULATION_SIZE) { fitness(population[it]) }
+                }
+
+                // ── Harvest distinct feasible schedules from the final population ─
                 fun fingerprint(sched: List<Course>) = sched
                     .sortedWith(compareBy({ it.code }, { it.section.componentType }, { it.section.component }))
                     .joinToString("||") {
                         "${it.code}|${it.section.component}|${it.section.days.joinToString(",")}|${it.section.startTime}|${it.section.endTime}"
                     }
 
-                val sorted = results
-                    .distinctBy { fingerprint(it) }
-                    .sortedByDescending { scheduleScore(it) }
+                val results = mutableListOf<List<Course>>()
+                val seen    = mutableSetOf<String>()
+
+                // Walk from best to worst fitness to collect top distinct schedules
+                val rankedIndices = fitnesses
+                    .withIndex()
+                    .sortedByDescending { it.value }
+                    .map { it.index }
+
+                for (idx in rankedIndices) {
+                    if (results.size >= MAX_RESULTS) break
+                    val placed = decode(population[idx])
+                    if (placed.size < slots.size) continue          // skip infeasible
+                    // Post-GA early-class hard filter: discard any schedule that still
+                    // contains a section starting before the cutoff.  This catches
+                    // pinned sections that bypass the candidate list filter, and acts
+                    // as a safety net even when the pre-check passed.
+                    if (avoidEarly && placed.any { it.section.startTime.hour < cutoff }) continue
+                    // Post-GA max-daily-hours hard filter: discard any schedule where
+                    // the total class time on any single day exceeds maxHours.
+                    val dailyTotals = mutableMapOf<String, Float>()
+                    placed.forEach { c ->
+                        val dur = c.section.endTime.toFloat() - c.section.startTime.toFloat()
+                        c.section.days.forEach { day ->
+                            dailyTotals[day] = (dailyTotals[day] ?: 0f) + dur
+                        }
+                    }
+                    if (dailyTotals.values.any { it > maxHours }) continue
+                    val fp = fingerprint(placed)
+                    if (seen.add(fp)) results.add(placed)
+                }
+
+                val sorted = results.sortedByDescending { scheduleScore(it) }
 
                 generatedSchedules   = sorted
                 currentScheduleIndex = 0
                 isGenerating         = false
 
-                if (sorted.isEmpty()) showNoResultsDialog = true
-                else showScheduleDialog = true
+                if (sorted.isEmpty()) {
+                    // Surface the most specific error possible.
+                    // Priority: early-class conflict → daily-hours conflict → generic.
+                    val earlyViolators = if (avoidEarly) slots
+                        .filter { slot -> slot.candidates.all { it.section.startTime.hour < cutoff } }
+                        .map { it.courseCode }.distinct()
+                    else emptyList()
+
+                    val dailyViolators = slots
+                        .filter { slot ->
+                            slot.candidates.all { c ->
+                                val dur = c.section.endTime.toFloat() - c.section.startTime.toFloat()
+                                dur > maxHours
+                            }
+                        }
+                        .map { it.courseCode }.distinct()
+
+                    when {
+                        earlyViolators.isNotEmpty() -> {
+                            earlyConflictCourses = earlyViolators
+                            showEarlyConflictDialog = true
+                        }
+                        dailyViolators.isNotEmpty() -> {
+                            dailyHoursConflictCourses = dailyViolators
+                            showDailyHoursConflictDialog = true
+                        }
+                        else -> showNoResultsDialog = true
+                    }
+                } else showScheduleDialog = true
 
             } catch (_: Exception) {
                 isGenerating = false
@@ -553,7 +768,7 @@ fun AIScreen(
                                 coroutineScope.launch {
                                     // Build a unique name and ID for the new timetable
                                     val newId   = java.util.UUID.randomUUID().toString()
-                                    val newName = "AI Schedule ${AppState.timetables.size + 1}"
+                                    val newName = "Generated Timetable ${AppState.timetables.size + 1}"
 
                                     // Derive the term from the currently active timetable so the
                                     // new timetable is labelled correctly (fall back to "1261").
@@ -602,6 +817,72 @@ fun AIScreen(
             title = { Text("No Schedules Found") },
             text = { Text("Could not build a conflict-free timetable that includes all selected courses. Make sure the chosen courses have non-overlapping sections, or try relaxing filters such as 'Avoid Early Classes' or 'Cluster Days'.") },
             confirmButton = { TextButton(onClick = { showNoResultsDialog = false }) { Text("OK") } }
+        )
+    }
+
+    // ── Early-class conflict dialog ───────────────────────────────────────────
+    // Shown when avoidEarlyClasses is on but one or more selected courses have
+    // NO section at or after the cutoff hour — making the preference impossible
+    // to satisfy.  We list the offending courses so the user knows exactly what
+    // to fix (deselect the course, pin a later section, or lower the cutoff).
+    if (showEarlyConflictDialog) {
+        val cutoffLabel = if (earlyClassCutoff == 12) "12:00 PM" else "${earlyClassCutoff}:00 AM"
+        val courseList  = earlyConflictCourses.joinToString("\n") { "  \u2022 $it" }
+        AlertDialog(
+            onDismissRequest = { showEarlyConflictDialog = false },
+            title = { Text("Early Class Conflict") },
+            text = {
+                Text(
+                    "You set \"No classes before $cutoffLabel\", but the following " +
+                            "course(s) only have sections that start before that time — " +
+                            "so no valid timetable can be built:\n\n$courseList\n\n" +
+                            "To fix this, you can:\n" +
+                            "  • Deselect the conflicting course(s)\n" +
+                            "  • Lower the early-class cutoff time\n" +
+                            "  • Turn off \"Avoid Early Classes\""
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showEarlyConflictDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFD700),
+                        contentColor   = Color.Black
+                    )
+                ) { Text("Got it") }
+            }
+        )
+    }
+
+    // ── Max-daily-hours conflict dialog ─────────────────────────────────────────
+    // Shown when a selected course has no section short enough to fit within the
+    // chosen daily cap — making it physically impossible to place that course.
+    if (showDailyHoursConflictDialog) {
+        val capLabel   = "${maxDailyHours.toInt()} hour${if (maxDailyHours.toInt() == 1) "" else "s"}"
+        val courseList = dailyHoursConflictCourses.joinToString("\n") { "  \u2022 $it" }
+        AlertDialog(
+            onDismissRequest = { showDailyHoursConflictDialog = false },
+            title = { Text("Daily Hours Conflict") },
+            text = {
+                Text(
+                    "You set a maximum of $capLabel per day, but the following " +
+                            "course(s) have sections that are individually longer than that — " +
+                            "so no valid timetable can be built:\n\n$courseList\n\n" +
+                            "To fix this, you can:\n" +
+                            "  \u2022 Deselect the conflicting course(s)\n" +
+                            "  \u2022 Increase the maximum daily hours\n" +
+                            "  \u2022 Pin a shorter section for the course"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showDailyHoursConflictDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFD700),
+                        contentColor   = Color.Black
+                    )
+                ) { Text("Got it") }
+            }
         )
     }
 
@@ -832,7 +1113,7 @@ fun AIScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Slider(
                             value = maxDailyHours,
-                            onValueChange = { maxDailyHours = it },
+                            onValueChange = { maxDailyHours = it.toInt().toFloat() },
                             valueRange = 4f..12f,
                             steps = 7,
                             colors = SliderDefaults.colors(

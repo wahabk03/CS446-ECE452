@@ -25,6 +25,10 @@ object AppState {
     val selectedCourseCodes = mutableStateSetOf<String>()
     // Key = "$courseCode||$componentType", value = the pinned Section
     val selectedSections    = mutableStateMapOf<String, Section>()
+    // Course data cache: key = "$term||$subject" → list of courses fetched from Firestore.
+    // Lives in AppState so it survives navigation; cleared on logout so stale data
+    // never outlasts a session.
+    val courseCache         = mutableStateMapOf<String, List<Course>>()
 
     // ── Preference screen: scheduling preferences (persists across navigation, cleared on logout) ──
     val avoidEarlyClasses = mutableStateOf(false)
@@ -54,6 +58,7 @@ object AppState {
         displayName.value = ""
         selectedCourseCodes.clear()
         selectedSections.clear()
+        courseCache.clear()
         avoidEarlyClasses.value = false
         earlyClassCutoff.value  = 10
         minimizeGaps.value      = false
