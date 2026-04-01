@@ -208,8 +208,6 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
     attached_content = _prepare_attached_content(file_name, file_bytes_base64)
 
     show_button = False
-    had_mutation_success = False
-    had_mutation_error = False
     llm_round_ms = []
     tool_stats = []
     loop_count = 0
@@ -261,13 +259,8 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
                 elif func_name == "clear_timetable":
                     tool_response = clear_timetable(**args)
                 elif func_name == "show_timetable_button":
-                    if had_mutation_success and not had_mutation_error:
-                        show_button = True
-                        tool_response = show_timetable_button(**args)
-                    else:
-                        tool_response = {
-                            "error": "Cannot show timetable button because no successful timetable update was confirmed in this request."
-                        }
+                    show_button = True
+                    tool_response = show_timetable_button(**args)
                 else:
                     tool_response = f"Warning: Function {func_name} not recognized."
             except Exception as e:
@@ -279,12 +272,6 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
                 "duration_ms": tool_elapsed_ms,
                 "ok": not _is_tool_error_response(tool_response)
             })
-
-            if func_name in MUTATION_TOOLS:
-                if _is_tool_error_response(tool_response):
-                    had_mutation_error = True
-                else:
-                    had_mutation_success = True
 
             print(f"Tool '{func_name}' response: {tool_response}")
 
@@ -484,8 +471,6 @@ def chat_stream():
             attached_content = _prepare_attached_content(file_name, file_bytes_base64)
 
             show_button = False
-            had_mutation_success = False
-            had_mutation_error = False
             llm_round_ms = []
             tool_stats = []
             loop_count = 0
@@ -536,13 +521,8 @@ def chat_stream():
                         elif func_name == "clear_timetable":
                             tool_response = clear_timetable(**args)
                         elif func_name == "show_timetable_button":
-                            if had_mutation_success and not had_mutation_error:
-                                show_button = True
-                                tool_response = show_timetable_button(**args)
-                            else:
-                                tool_response = {
-                                    "error": "Cannot show timetable button because no successful timetable update was confirmed in this request."
-                                }
+                            show_button = True
+                            tool_response = show_timetable_button(**args)
                         else:
                             tool_response = f"Warning: Function {func_name} not recognized."
                     except Exception as e:
@@ -554,12 +534,6 @@ def chat_stream():
                         "duration_ms": tool_elapsed_ms,
                         "ok": not _is_tool_error_response(tool_response)
                     })
-
-                    if func_name in MUTATION_TOOLS:
-                        if _is_tool_error_response(tool_response):
-                            had_mutation_error = True
-                        else:
-                            had_mutation_success = True
 
                     print(f"Tool '{func_name}' response: {tool_response}")
 
