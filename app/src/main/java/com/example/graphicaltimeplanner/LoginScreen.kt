@@ -65,11 +65,12 @@ fun LoginScreen(
     val coroutineScope = rememberCoroutineScope()
 
     val primaryYellow = colorResource(R.color.uw_gold_lvl4)
-    // Gradient: top white → bottom pale yellow (matching screenshot)
-    val gradientBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFFFFFFFF), Color(0xFFFFFDE8))
+    // Diagonal yellow → orange gradient
+    val gradientBrush = Brush.linearGradient(
+        colors = listOf(Color(0xFFFFD700), Color(0xFFFF8C00))
     )
-    val fieldBackground = Color(0xFFF2F2F7)
+    // Semi-transparent white field so text is readable on the gradient
+    val fieldBackground = Color(0x33FFFFFF)
 
     Box(
         modifier = Modifier
@@ -92,7 +93,7 @@ fun LoginScreen(
                     modifier = Modifier
                         .size(96.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(primaryYellow),
+                        .background(Color(0x33FFFFFF)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -107,7 +108,7 @@ fun LoginScreen(
                     text = "Graphical Time Planner",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = Color.White
                 )
             }
 
@@ -122,13 +123,13 @@ fun LoginScreen(
                     text = "Welcome",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = Color.White
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Sign in to access your timetable",
                     fontSize = 15.sp,
-                    color = Color(0xFF888888)
+                    color = Color(0xCCFFFFFF)
                 )
             }
 
@@ -140,7 +141,7 @@ fun LoginScreen(
                     text = "Email",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.Black
+                    color = Color.White
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -155,9 +156,13 @@ fun LoginScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedContainerColor = fieldBackground,
                         focusedContainerColor = fieldBackground,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = primaryYellow,
-                        cursorColor = primaryYellow
+                        unfocusedBorderColor = Color(0x55FFFFFF),
+                        focusedBorderColor = Color.White,
+                        cursorColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedTextColor = Color.White,
+                        unfocusedPlaceholderColor = Color(0xAAFFFFFF),
+                        focusedPlaceholderColor = Color(0xAAFFFFFF)
                     )
                 )
             }
@@ -170,7 +175,7 @@ fun LoginScreen(
                     text = "Password",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.Black
+                    color = Color.White
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -196,9 +201,13 @@ fun LoginScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedContainerColor = fieldBackground,
                         focusedContainerColor = fieldBackground,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = primaryYellow,
-                        cursorColor = primaryYellow
+                        unfocusedBorderColor = Color(0x55FFFFFF),
+                        focusedBorderColor = Color.White,
+                        cursorColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedTextColor = Color.White,
+                        unfocusedPlaceholderColor = Color(0xAAFFFFFF),
+                        focusedPlaceholderColor = Color(0xAAFFFFFF)
                     )
                 )
             }
@@ -252,8 +261,8 @@ fun LoginScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = primaryYellow,
-                    contentColor = Color.Black
+                    containerColor = Color.White,
+                    contentColor = Color(0xFFFF8C00)
                 ),
                 enabled = !isLoading
             ) {
@@ -278,7 +287,7 @@ fun LoginScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Don't have an account? ",
-                    color = Color(0xFF666666),
+                    color = Color(0xCCFFFFFF),
                     fontSize = 15.sp
                 )
                 TextButton(
