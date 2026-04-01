@@ -60,4 +60,18 @@ object ChatStateManager {
             thinkingFoldVersion += 1
         }
     }
+
+    fun resetAllState() {
+        activeSession = null
+        sessionId = null
+        messages = emptyList()
+        isWaitingForAgent = false
+        showRedirectButton = false
+        redirectButtonCountdownProgress = 1f
+        thinkingFoldVersion = 0
+
+        thinkingFoldBySession.clear()
+        newChatDraft = ""
+        sessionDrafts.clear()
+    }
 }

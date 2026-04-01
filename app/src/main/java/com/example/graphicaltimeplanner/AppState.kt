@@ -52,6 +52,10 @@ object AppState {
             .forEach {
                 com.google.firebase.messaging.FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
             }
+
+        // Clear any account-scoped chatbot runtime cache to prevent cross-user leakage.
+        ChatStateManager.resetAllState()
+
         scheduledCourses.clear()
         timetables.clear()
         activeTimetableId.value = null

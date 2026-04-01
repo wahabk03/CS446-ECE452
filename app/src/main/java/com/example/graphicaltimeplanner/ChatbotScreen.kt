@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -52,6 +53,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.TextButton
 import java.util.UUID
+import kotlinx.coroutines.Job
 
 data class ChatMessage(
     val role: String = "",
@@ -99,6 +101,8 @@ fun ChatbotScreen(
     var inputValue by remember { mutableStateOf("") }
     var attachedFileUri by remember { mutableStateOf<Uri?>(null) }
     var attachedFileName by remember { mutableStateOf<String?>(null) }
+    var generationJob by remember { mutableStateOf<Job?>(null) }
+    var activeRequestId by remember { mutableStateOf<String?>(null) }
     
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -483,6 +487,14 @@ Column(
 
                 IconButton(
                     onClick = {
+                        if (ChatStateManager.isWaitingForAgent) {
+                            generationJob?.cancel()
+                            generationJob = null
+                            activeRequestId = null
+                            ChatStateManager.isWaitingForAgent = false
+                            return@IconButton
+                        }
+
                         if (inputValue.isNotBlank() || attachedFileUri != null) {
                             // Add user message
                             val currentMsgs = ChatStateManager.messages + ChatMessage("user", inputValue, attachedFileName)
@@ -496,10 +508,12 @@ Column(
                             attachedFileUri = null
                             attachedFileName = null
                             ChatStateManager.isWaitingForAgent = true
+                            val requestId = UUID.randomUUID().toString()
+                            activeRequestId = requestId
                             
                             // Save user message initially
                             val currentSessionId = ChatStateManager.sessionId
-                            ChatStateManager.appScope.launch {
+                            generationJob = ChatStateManager.appScope.launch {
                                 var idToSave = currentSessionId
                                 var isNewSession = false
                                 if (idToSave == null) {
@@ -526,45 +540,63 @@ Column(
                                 val thinkingGroupId = UUID.randomUUID().toString()
                                 ChatStateManager.setThinkingGroupExpanded(idToSave, thinkingGroupId, false)
 
-                                val agentResponse = AgentApi.sendMessage(
-                                    context = context,
-                                    message = userMsg,
-                                    history = currentMsgs.dropLast(1), // sending history without the new user msg
-                                    fileUri = fileUriCopy,
-                                    fileName = fileNameCopy,
-                                    onToolEvent = { toolMessage ->
-                                        ChatStateManager.appScope.launch {
-                                            val progressMsgs = ChatStateManager.messages + ChatMessage(
-                                                role = "tool_status",
-                                                content = toolMessage,
-                                                thinkingGroupId = thinkingGroupId
-                                            )
-                                            ChatStateManager.messages = progressMsgs
-                                            ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = progressMsgs)
+                                try {
+                                    val agentResponse = AgentApi.sendMessage(
+                                        context = context,
+                                        message = userMsg,
+                                        history = currentMsgs.dropLast(1), // sending history without the new user msg
+                                        fileUri = fileUriCopy,
+                                        fileName = fileNameCopy,
+                                        onToolEvent = { toolMessage ->
+                                            if (activeRequestId != requestId) return@sendMessage
+                                            ChatStateManager.appScope.launch {
+                                                if (activeRequestId != requestId) return@launch
+                                                val progressMsgs = ChatStateManager.messages + ChatMessage(
+                                                    role = "tool_status",
+                                                    content = toolMessage,
+                                                    thinkingGroupId = thinkingGroupId
+                                                )
+                                                ChatStateManager.messages = progressMsgs
+                                                ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = progressMsgs)
+                                            }
                                         }
+                                    )
+
+                                    if (activeRequestId != requestId) {
+                                        return@launch
                                     }
-                                )
 
-                                val newMsgs = ChatStateManager.messages + ChatMessage("assistant", agentResponse.response)
-                                ChatStateManager.isWaitingForAgent = false
-                                ChatStateManager.messages = newMsgs
-                                ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
-                                ChatRepository.saveChatMessages(idToSave!!, newMsgs)
+                                    val newMsgs = ChatStateManager.messages + ChatMessage("assistant", agentResponse.response)
+                                    ChatStateManager.isWaitingForAgent = false
+                                    ChatStateManager.messages = newMsgs
+                                    ChatStateManager.activeSession = ChatStateManager.activeSession?.copy(messages = newMsgs)
+                                    ChatRepository.saveChatMessages(idToSave!!, newMsgs)
 
-                                // Trigger redirect button if the AI called show_timetable_button tool
-                                if (agentResponse.showButton) {
-                                    ChatStateManager.showRedirectButton = true
-                                    ChatStateManager.redirectButtonCountdownProgress = 1f
+                                    // Trigger redirect button if the AI called show_timetable_button tool
+                                    if (agentResponse.showButton) {
+                                        ChatStateManager.showRedirectButton = true
+                                        ChatStateManager.redirectButtonCountdownProgress = 1f
+                                    }
+                                } finally {
+                                    if (activeRequestId == requestId) {
+                                        ChatStateManager.isWaitingForAgent = false
+                                        generationJob = null
+                                        activeRequestId = null
+                                    }
                                 }
                             }
                         }
                     },
-                    enabled = (inputValue.isNotBlank() || attachedFileUri != null) && !ChatStateManager.isWaitingForAgent
+                    enabled = ChatStateManager.isWaitingForAgent || inputValue.isNotBlank() || attachedFileUri != null
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send Message",
-                        tint = if ((inputValue.isNotBlank() || attachedFileUri != null) && !ChatStateManager.isWaitingForAgent) colorResource(R.color.uw_gold_lvl4) else Color.Gray
+                        imageVector = if (ChatStateManager.isWaitingForAgent) Icons.Default.StopCircle else Icons.AutoMirrored.Filled.Send,
+                        contentDescription = if (ChatStateManager.isWaitingForAgent) "Stop generating" else "Send Message",
+                        tint = if (
+                            ChatStateManager.isWaitingForAgent ||
+                            inputValue.isNotBlank() ||
+                            attachedFileUri != null
+                        ) colorResource(R.color.uw_gold_lvl4) else Color.Gray
                     )
                 }
             }

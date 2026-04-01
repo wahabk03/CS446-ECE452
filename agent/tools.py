@@ -5,6 +5,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from llm_config import SERPAPI_API_KEY
 
+_HTTP_SESSION = requests.Session()
+_SERPAPI_TIMEOUT_SECS = 20
+
 # Initialize firebase admin if not already initialized
 if not firebase_admin._apps:
     cred = credentials.Certificate("serviceAccountKey.json")
@@ -62,7 +65,7 @@ def browse_online(query: str) -> str:
         "api_key": SERPAPI_API_KEY
     }
     try:
-        response = requests.get(url, params=params)
+        response = _HTTP_SESSION.get(url, params=params, timeout=_SERPAPI_TIMEOUT_SECS)
         response.raise_for_status()
         results = response.json()
         snippets = []
@@ -90,7 +93,7 @@ def browse_uwflow(query: str) -> str:
     }
 
     try:
-        response = requests.get(url, params=params)
+        response = _HTTP_SESSION.get(url, params=params, timeout=_SERPAPI_TIMEOUT_SECS)
         response.raise_for_status()
         results = response.json()
 
@@ -113,8 +116,10 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
     """
     Accesses the database with read-only permissions.
     - query_type='course_info': Reads from the global 'courses' collection. 'target_id' is the course doc id (e.g., '1255_ACTSC_221').
-    - query_type='user_schedule': Reads the user's entire 'scheduledCourses' list from the 'users/{uid}' document.
+        - query_type='user_schedule': Reads the user's timetable and profile summary from the 'users/{uid}' document.
     - query_type='user_assistant': Reads the user's saved wishlist and generated schedules from 'users/{uid}/assistant/{target_id}'.
+        - query_type='major_graduation_requirement': Reads major-specific graduation requirement doc(s) from 'major_graduation_requirement'.
+            If target_id is missing, attempts to use user's saved major/majorName.
     """
     print(f"Querying database - User: {uid}, Type: {query_type}, Target: {target_id}")
     if not firebase_admin._apps:
@@ -182,7 +187,16 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
                 # Return the timetables specifically so the agent can see active timetables and their courses
                 timetables = data.get("timetables", [])
                 active_id = data.get("activeTimetableId")
-                return {"timetables": timetables, "activeTimetableId": active_id}
+                return {
+                    "timetables": timetables,
+                    "activeTimetableId": active_id,
+                    "program": data.get("program"),
+                    "major": data.get("major"),
+                    "majorName": data.get("majorName"),
+                    "faculty": data.get("faculty"),
+                    "yearLevel": data.get("yearLevel"),
+                    "yearLevelLabel": data.get("yearLevelLabel")
+                }
             return {"timetables": [], "message": "User document not found or no schedule saved."}
             
         elif query_type == "user_assistant":
@@ -195,6 +209,54 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
             if doc.exists:
                 return {"assistant_data": doc.to_dict()}
             return {"message": "No assistant data found. The collection for this term is currently empty.", "assistant_data": {}}
+
+        elif query_type == "major_graduation_requirement":
+            user_doc = db.collection("users").document(uid).get()
+            user_data = user_doc.to_dict() or {} if user_doc.exists else {}
+
+            # Always prioritize the user's saved major to avoid invalid program IDs
+            # being passed by model-generated tool arguments.
+            user_major = str(user_data.get("major") or "").strip()
+            user_major_name = str(user_data.get("majorName") or "").strip()
+            requested = user_major or user_major_name or str(target_id or "").strip()
+            if not requested:
+                return {
+                    "message": "No major specified. Provide target_id or save your major in profile first.",
+                    "major_graduation_requirement": {}
+                }
+
+            collection = db.collection("major_graduation_requirement")
+            candidates = [requested]
+            normalized = requested.lower().replace("_", " ").strip()
+            if normalized != requested:
+                candidates.append(normalized)
+
+            # 1) Direct doc-id lookup attempts.
+            for candidate in candidates:
+                doc = collection.document(candidate).get()
+                if doc.exists:
+                    return {
+                        "major_graduation_requirement": doc.to_dict(),
+                        "resolved_target_id": doc.id
+                    }
+
+            # 2) Fallback scan against common name fields.
+            all_docs = collection.stream()
+            for d in all_docs:
+                payload = d.to_dict() or {}
+                major_field = str(payload.get("major", "")).strip().lower()
+                major_name_field = str(payload.get("majorName", "")).strip().lower()
+                doc_id_field = d.id.strip().lower()
+                if normalized in {major_field, major_name_field, doc_id_field}:
+                    return {
+                        "major_graduation_requirement": payload,
+                        "resolved_target_id": d.id
+                    }
+
+            return {
+                "message": f"No major graduation requirement found for '{requested}'.",
+                "major_graduation_requirement": {}
+            }
             
         else:
             return {"error": f"Unknown query_type: {query_type}"}
@@ -548,18 +610,18 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_database_readonly",
-            "description": "Accesses the timetable database to retrieve user schedules, academic assistant history, or specific course info.",
+            "description": "Accesses the timetable/profile database to retrieve schedules, major graduation requirements, assistant history, or specific course info.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query_type": {
                         "type": "string",
-                        "enum": ["course_info", "user_schedule", "user_assistant"],
-                        "description": "Determine what to fetch. 'course_info': global courses. 'user_schedule': the user's primary saved schedule. 'user_assistant': the user's generated timetables/wishlists."
+                        "enum": ["course_info", "user_schedule", "user_assistant", "major_graduation_requirement"],
+                        "description": "Determine what to fetch. 'course_info': global courses. 'user_schedule': user's schedule + profile summary (program/major/year). 'user_assistant': generated timetables/wishlists. 'major_graduation_requirement': requirements doc for a major."
                     },
                     "target_id": {
                         "type": "string",
-                        "description": "The specific document ID. Required for 'course_info' (e.g. '1255_ACTSC_221'). For 'user_assistant', it is the term code (e.g., '1255'). Optional/ignored for 'user_schedule'."
+                        "description": "The specific document ID. Required for 'course_info' (e.g. '1255_ACTSC_221'). For 'user_assistant', it is the term code (e.g., '1255'). For 'major_graduation_requirement', pass major slug/name (optional if user profile already has a major). Optional/ignored for 'user_schedule'."
                     }
                 },
                 "required": ["query_type"]
