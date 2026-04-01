@@ -14,6 +14,37 @@ app = Flask(__name__)
 
 MUTATION_TOOLS = {"create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"}
 
+
+def _normalize_advisor_response(text: str) -> str:
+    """Normalize stylistic artifacts so chat output stays clean and consistent."""
+    if not text:
+        return ""
+
+    cleaned = str(text)
+
+    # Prefer ASCII arrows for readability in the app UI.
+    cleaned = re.sub(r"[\u2192\u21d2\u27f6\u279d]", "->", cleaned)
+
+    normalized_lines = []
+    for line in cleaned.splitlines():
+        # Convert bullets like: - *Some sentence* (Italian)  ->  - Some sentence
+        m = re.match(r"^(\s*[-*]\s+)\*(.+?)\*\s*(\([A-Za-z][A-Za-z\s-]{1,24}\))?\s*$", line)
+        if m:
+            prefix, content, _ = m.groups()
+            normalized_lines.append(f"{prefix}{content.strip()}")
+            continue
+
+        # Convert standalone italicized full-sentence lines to plain text.
+        m2 = re.match(r"^(\s*)\*(.+?)\*\s*(\([A-Za-z][A-Za-z\s-]{1,24}\))?\s*$", line)
+        if m2:
+            indent, content, _ = m2.groups()
+            normalized_lines.append(f"{indent}{content.strip()}")
+            continue
+
+        normalized_lines.append(line)
+
+    return "\n".join(normalized_lines)
+
 def _is_tool_error_response(tool_response) -> bool:
     if isinstance(tool_response, dict):
         return bool(tool_response.get("error"))
@@ -240,7 +271,7 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
                 "content": str(tool_response)
             })
 
-    final_response = response_msg.get("content", "")
+    final_response = _normalize_advisor_response(response_msg.get("content", ""))
     return {
         "response": final_response,
         "history": messages,
@@ -483,7 +514,7 @@ def chat_stream():
                         "content": str(tool_response)
                     })
 
-            final_response = response_msg.get("content", "")
+            final_response = _normalize_advisor_response(response_msg.get("content", ""))
 
             yield emit({
                 "type": "final",
