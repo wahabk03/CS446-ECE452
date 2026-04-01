@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
@@ -347,6 +348,15 @@ fun ProfileScreen(
                                 color = if (selectedProgram != null) Color(0xFF444444) else Color.LightGray
                             )
                         },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = "Toggle programs",
+                                modifier = Modifier.clickable {
+                                    programDropdownExpanded = !programDropdownExpanded
+                                }
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .onFocusChanged { focusState ->
@@ -573,6 +583,15 @@ fun ProfileScreen(
                             Text(
                                 selectedMajor?.name ?: "Type to search majors...",
                                 color = if (selectedMajor != null) Color(0xFF444444) else Color.LightGray
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = "Toggle majors",
+                                modifier = Modifier.clickable {
+                                    majorDropdownExpanded = !majorDropdownExpanded
+                                }
                             )
                         },
                         modifier = Modifier
