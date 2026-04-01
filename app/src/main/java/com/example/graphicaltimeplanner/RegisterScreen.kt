@@ -65,12 +65,11 @@ fun RegisterScreen(
     val auth = remember { FirebaseAuth.getInstance() }
     val coroutineScope = rememberCoroutineScope()
 
-    val primaryYellow = colorResource(R.color.uw_gold_lvl4)
-    // Diagonal yellow → orange gradient (matches LoginScreen)
-    val gradientBrush = Brush.linearGradient(
-        colors = listOf(Color(0xFFFFD700), Color(0xFFFF8C00))
+    val primaryYellow = colorResource(R.color.uw_gold_lvl4)  // #FFEAAB00
+    val gradientBrush = Brush.verticalGradient(
+        colors = listOf(Color(0xFFFFFFFF), Color(0xFFFFFDE8))
     )
-    val fieldBackground = Color(0x33FFFFFF)
+    val fieldBackground = Color(0xFFF2F2F7)
 
     Box(
         modifier = Modifier
@@ -93,7 +92,7 @@ fun RegisterScreen(
                     modifier = Modifier
                         .size(96.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0x33FFFFFF)),
+                        .background(primaryYellow),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -108,7 +107,7 @@ fun RegisterScreen(
                     text = "Graphical Time Planner",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.Black
                 )
             }
 
@@ -122,13 +121,13 @@ fun RegisterScreen(
                     text = "Create account",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.Black
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Get started with your timetable today",
                     fontSize = 15.sp,
-                    color = Color(0xCCFFFFFF)
+                    color = Color(0xFF888888)
                 )
             }
 
@@ -155,17 +154,9 @@ fun RegisterScreen(
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = fieldBackground,
                     focusedContainerColor = fieldBackground,
-                    unfocusedBorderColor = Color(0x55FFFFFF),
-                    focusedBorderColor = Color.White,
-                    cursorColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    unfocusedLabelColor = Color(0xAAFFFFFF),
-                    focusedLabelColor = Color.White,
-                    unfocusedPlaceholderColor = Color(0xAAFFFFFF),
-                    focusedPlaceholderColor = Color(0xAAFFFFFF),
-                    unfocusedLeadingIconColor = Color(0xAAFFFFFF),
-                    focusedLeadingIconColor = Color.White
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = primaryYellow,
+                    cursorColor = primaryYellow
                 )
             )
 
@@ -185,17 +176,9 @@ fun RegisterScreen(
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = fieldBackground,
                     focusedContainerColor = fieldBackground,
-                    unfocusedBorderColor = Color(0x55FFFFFF),
-                    focusedBorderColor = Color.White,
-                    cursorColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    unfocusedLabelColor = Color(0xAAFFFFFF),
-                    focusedLabelColor = Color.White,
-                    unfocusedPlaceholderColor = Color(0xAAFFFFFF),
-                    focusedPlaceholderColor = Color(0xAAFFFFFF),
-                    unfocusedLeadingIconColor = Color(0xAAFFFFFF),
-                    focusedLeadingIconColor = Color.White
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = primaryYellow,
+                    cursorColor = primaryYellow
                 )
             )
 
@@ -211,7 +194,7 @@ fun RegisterScreen(
                     TextButton(onClick = { passwordVisible = !passwordVisible }) {
                         Text(
                             if (passwordVisible) "Hide" else "Show",
-                            color = Color.White,
+                            color = primaryYellow,
                             fontSize = 14.sp
                         )
                     }
@@ -225,17 +208,9 @@ fun RegisterScreen(
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = fieldBackground,
                     focusedContainerColor = fieldBackground,
-                    unfocusedBorderColor = Color(0x55FFFFFF),
-                    focusedBorderColor = Color.White,
-                    cursorColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    unfocusedLabelColor = Color(0xAAFFFFFF),
-                    focusedLabelColor = Color.White,
-                    unfocusedPlaceholderColor = Color(0xAAFFFFFF),
-                    focusedPlaceholderColor = Color(0xAAFFFFFF),
-                    unfocusedLeadingIconColor = Color(0xAAFFFFFF),
-                    focusedLeadingIconColor = Color.White
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = primaryYellow,
+                    cursorColor = primaryYellow
                 )
             )
 
@@ -251,7 +226,7 @@ fun RegisterScreen(
                     TextButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                         Text(
                             if (confirmPasswordVisible) "Hide" else "Show",
-                            color = Color.White,
+                            color = primaryYellow,
                             fontSize = 14.sp
                         )
                     }
@@ -265,17 +240,9 @@ fun RegisterScreen(
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = fieldBackground,
                     focusedContainerColor = fieldBackground,
-                    unfocusedBorderColor = Color(0x55FFFFFF),
-                    focusedBorderColor = Color.White,
-                    cursorColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    unfocusedLabelColor = Color(0xAAFFFFFF),
-                    focusedLabelColor = Color.White,
-                    unfocusedPlaceholderColor = Color(0xAAFFFFFF),
-                    focusedPlaceholderColor = Color(0xAAFFFFFF),
-                    unfocusedLeadingIconColor = Color(0xAAFFFFFF),
-                    focusedLeadingIconColor = Color.White
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = primaryYellow,
+                    cursorColor = primaryYellow
                 )
             )
 
@@ -343,8 +310,8 @@ fun RegisterScreen(
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color(0xFFFF8C00)
+                    containerColor = primaryYellow,
+                    contentColor = Color.Black
                 ),
                 enabled = !isLoading
             ) {
@@ -370,7 +337,7 @@ fun RegisterScreen(
             ) {
                 Text(
                     text = "Already have an account? ",
-                    color = Color(0xCCFFFFFF),
+                    color = Color(0xFF666666),
                     fontSize = 15.sp
                 )
                 TextButton(onClick = onLoginClick) {
