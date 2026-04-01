@@ -27,12 +27,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -116,6 +119,22 @@ private fun buildFallbackGeneratedEmail(issue: String): GeneratedEmail {
     return buildEmailFromTemplate(issue)
 }
 
+private fun formatTimetableForEmail(timetable: Timetable): String {
+    val termLabel = CourseRepository.TERM_MAPPINGS
+        .find { it.first == timetable.term }?.second ?: timetable.term
+
+    val courseLines = timetable.courses
+        .sortedBy { it.code }
+        .joinToString(separator = "\n") { course ->
+            val days = course.section.days.joinToString("/")
+            val time = "${course.section.startTime} - ${course.section.endTime}"
+            val location = course.section.location
+            "  ${course.code}  ${course.section.component}  $days $time  $location"
+        }
+
+    return "---\nMy Current Timetable: ${timetable.name} ($termLabel)\n\n$courseLines\n---"
+}
+
 // ─── AdvisorScreen ────────────────────────────────────────────────────────────
 
 @Composable
@@ -142,6 +161,10 @@ fun AdvisorScreen(
     var showResultDialog by remember { mutableStateOf(false) }
     var isGeneratingEmail by remember { mutableStateOf(false) }
     var emailGenerationError by remember { mutableStateOf<String?>(null) }
+    // Timetable attachment state
+    var selectedTimetable by remember { mutableStateOf<Timetable?>(null) }
+    var timetableDropdownExpanded by remember { mutableStateOf(false) }
+
     // Editable fields in the review dialog
     var editFromEmail by remember { mutableStateOf("student@uwaterloo.ca") }
     var editToEmail by remember { mutableStateOf("advisor@uwaterloo.ca") }
@@ -207,7 +230,7 @@ fun AdvisorScreen(
     // ── Compose dialog ────────────────────────────────────────────────────────
     if (showComposeDialog) {
         Dialog(
-            onDismissRequest = { showComposeDialog = false; issueText = "" },
+            onDismissRequest = { showComposeDialog = false; issueText = ""; selectedTimetable = null },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Box(
@@ -238,6 +261,7 @@ fun AdvisorScreen(
                                 if (!isGeneratingEmail) {
                                     showComposeDialog = false
                                     issueText = ""
+                                    selectedTimetable = null
                                     emailGenerationError = null
                                 }
                             },
@@ -290,6 +314,67 @@ fun AdvisorScreen(
                         )
                     )
 
+                    // Timetable attachment selector
+                    if (AppState.timetables.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "Attach Timetable (Optional)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box {
+                            OutlinedTextField(
+                                value = selectedTimetable?.let { tt ->
+                                    val termLabel = CourseRepository.TERM_MAPPINGS
+                                        .find { it.first == tt.term }?.second ?: tt.term
+                                    "${tt.name} ($termLabel)"
+                                } ?: "None",
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Default.ArrowDropDown,
+                                        contentDescription = "Select timetable",
+                                        modifier = Modifier.clickable { timetableDropdownExpanded = true }
+                                    )
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedContainerColor = Color(0xFFF7F7F7),
+                                    focusedContainerColor = Color(0xFFF7F7F7),
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedBorderColor = primaryYellow
+                                )
+                            )
+                            DropdownMenu(
+                                expanded = timetableDropdownExpanded,
+                                onDismissRequest = { timetableDropdownExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("None") },
+                                    onClick = {
+                                        selectedTimetable = null
+                                        timetableDropdownExpanded = false
+                                    }
+                                )
+                                AppState.timetables.forEach { tt ->
+                                    val termLabel = CourseRepository.TERM_MAPPINGS
+                                        .find { it.first == tt.term }?.second ?: tt.term
+                                    DropdownMenuItem(
+                                        text = { Text("${tt.name} ($termLabel)") },
+                                        onClick = {
+                                            selectedTimetable = tt
+                                            timetableDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
@@ -317,7 +402,11 @@ fun AdvisorScreen(
 
                                         generatedEmail = generated
                                         editSubject = generated.subject
-                                        editBody = generated.body
+                                        editBody = if (selectedTimetable != null) {
+                                            generated.body + "\n\n" + formatTimetableForEmail(selectedTimetable!!)
+                                        } else {
+                                            generated.body
+                                        }
 
                                         val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
                                         if (!userEmail.isNullOrBlank()) editFromEmail = userEmail
@@ -331,7 +420,11 @@ fun AdvisorScreen(
                                         val fallback = buildFallbackGeneratedEmail(issueSnapshot)
                                         generatedEmail = fallback
                                         editSubject = fallback.subject
-                                        editBody = fallback.body
+                                        editBody = if (selectedTimetable != null) {
+                                            fallback.body + "\n\n" + formatTimetableForEmail(selectedTimetable!!)
+                                        } else {
+                                            fallback.body
+                                        }
                                         showComposeDialog = false
                                         showResultDialog = true
                                     } finally {

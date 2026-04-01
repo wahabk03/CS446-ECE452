@@ -80,171 +80,188 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import java.util.UUID
 
-// ─── iCal export helper ───────────────────────────────────────────────────────
 
-private fun buildIcsContent(courses: List<Course>): String {
-    val sb = StringBuilder()
-    sb.appendLine("BEGIN:VCALENDAR")
-    sb.appendLine("VERSION:2.0")
-    sb.appendLine("PRODID:-//GraphicalTimePlanner//EN")
-    sb.appendLine("CALSCALE:GREGORIAN")
-    sb.appendLine("METHOD:PUBLISH")
 
-    val dayToIcal = mapOf(
-        "Mon" to "MO", "Tue" to "TU", "Wed" to "WE",
-        "Thu" to "TH", "Fri" to "FR", "Sat" to "SA", "Sun" to "SU"
-    )
-
-    // Use a fixed reference week (first week of term) – Mon 2026-01-05
-    val refMonday = mapOf(
-        "Mon" to "20260105", "Tue" to "20260106", "Wed" to "20260107",
-        "Thu" to "20260108", "Fri" to "20260109"
-    )
-
-    for (course in courses) {
-        val s = course.section
-        for (day in s.days) {
-            val dateStr = refMonday[day] ?: continue
-            val icalDays = s.days.mapNotNull { dayToIcal[it] }.joinToString(",")
-            val uid = UUID.randomUUID().toString()
-            val startStr = "%sT%02d%02d00".format(dateStr, s.startTime.hour, s.startTime.minute)
-            val endStr   = "%sT%02d%02d00".format(dateStr, s.endTime.hour,   s.endTime.minute)
-            sb.appendLine("BEGIN:VEVENT")
-            sb.appendLine("UID:$uid")
-            sb.appendLine("DTSTART:$startStr")
-            sb.appendLine("DTEND:$endStr")
-            sb.appendLine("RRULE:FREQ=WEEKLY;BYDAY=$icalDays;COUNT=13")
-            sb.appendLine("SUMMARY:${course.code} – ${s.component}")
-            sb.appendLine("LOCATION:${s.location}")
-            sb.appendLine("DESCRIPTION:${course.title}")
-            sb.appendLine("END:VEVENT")
-            break  // one VEVENT per course (RRULE covers all days)
-        }
-    }
-
-    sb.appendLine("END:VCALENDAR")
-    return sb.toString()
-}
-
-private fun saveIcsToDownloads(context: Context, icsContent: String): Boolean {
-    return try {
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, "timetable.ics")
-            put(MediaStore.Downloads.MIME_TYPE, "text/calendar")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
-        resolver.openOutputStream(uri)?.use { it.write(icsContent.toByteArray()) }
-        true
-    } catch (e: Exception) {
-        false
-    }
-}
-
-// ─── Timetable-to-Bitmap helper ───────────────────────────────────────────────
+// ─── Timetable-to-Bitmap helper ─────────────────────────────────────────────
+//
+// Mirrors TimetableView exactly:
+//   • Same days, startHour=8, endHour=23, hourHeight=60 dp
+//   • Same timeColumnWidth=48 dp, same inset fraction (4% each side)
+//   • Same course colour palette and 3-tier text layout
+//   • Renders the FULL logical height so nothing is cropped.
+// screenDensity: pass LocalDensity.current.density from the Composable caller.
 
 private val courseColorInts = listOf(
     Color(0xFFFFD700).toArgb(), Color(0xFFE1BEE7).toArgb(), Color(0xFFBBDEFB).toArgb(),
     Color(0xFFC8E6C9).toArgb(), Color(0xFFFFF9C4).toArgb()
 )
 
-private fun renderTimetableBitmap(courses: List<Course>): Bitmap {
-    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+private fun renderTimetableBitmap(courses: List<Course>, density: Float): Bitmap {
+    // ── Layout constants – kept in sync with TimetableView ───────────────────
+    val days      = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
     val startHour = 8
-    val endHour = 22
-    val hourPx = 80f
-    val timeColW = 80f
-    val headerH = 50f
-    val colW = 160f
-    val totalW = (timeColW + colW * days.size).toInt()
-    val totalH = (headerH + (endHour - startHour + 1) * hourPx).toInt()
+    val endHour   = 23
 
-    val bmp = Bitmap.createBitmap(totalW, totalH, Bitmap.Config.ARGB_8888)
+    fun Float.dp() = this * density
+    fun Int.dp()   = this.toFloat() * density
+
+    val hourPx   = 60f.dp()   // hourHeight = 60.dp
+    val timeColW = 48f.dp()   // timeColumnWidth = 48.dp
+    val headerH  = 44f.dp()   // header Row height (12 dp padding × 2 + ~15 sp text ≈ 44 dp)
+    val hPad     = 8f.dp()    // padding(horizontal = 8.dp) on the whole BoxWithConstraints
+
+    // Fixed canvas width = 400 dp (comfortable for a phone screenshot)
+    val totalW  = 400f.dp().toInt()
+    val gridW   = totalW - timeColW - hPad * 2
+    val colW    = gridW / days.size
+    val gridX   = timeColW + hPad          // x-coordinate where the day grid starts
+    val totalH  = (headerH + (endHour - startHour + 1) * hourPx).toInt()
+
+    val bmp    = Bitmap.createBitmap(totalW, totalH, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
     canvas.drawColor(android.graphics.Color.WHITE)
 
-    val gridPaint = Paint().apply { color = android.graphics.Color.parseColor("#E0E0E0"); strokeWidth = 1f }
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#888888")
-        textSize = 28f
+    // ── Paints ────────────────────────────────────────────────────────────────
+    val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style       = Paint.Style.STROKE
+        strokeWidth = 1f.dp()
+        color       = android.graphics.Color.parseColor("#E0E0E0")
     }
-    val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#FFD700")
-        textSize = 30f
-        typeface = Typeface.DEFAULT_BOLD
+    val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = 12f.dp()
+        textAlign = Paint.Align.RIGHT
+        color     = android.graphics.Color.parseColor("#888888")
     }
-    val blockTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK; textSize = 24f; typeface = Typeface.DEFAULT_BOLD
+    val dayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = 15f.dp()
+        typeface  = Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+        color     = android.graphics.Color.parseColor("#FFD700")
     }
-    val subTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#444444"); textSize = 20f
+    val blockFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = 13f.dp()
+        typeface  = Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+        color     = android.graphics.Color.BLACK
+    }
+    val compPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = 11f.dp()
+        textAlign = Paint.Align.CENTER
+        color     = android.graphics.Color.parseColor("#333333")
+    }
+    val timePaint2 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = 10f.dp()
+        textAlign = Paint.Align.CENTER
+        color     = android.graphics.Color.parseColor("#555555")
     }
 
-    // Day headers
+    // ── Day headers ───────────────────────────────────────────────────────────
     days.forEachIndexed { i, day ->
-        val x = timeColW + i * colW + colW / 2f
-        boldPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(day, x, headerH - 10f, boldPaint)
-        canvas.drawLine(timeColW + i * colW, 0f, timeColW + i * colW, totalH.toFloat(), gridPaint)
+        val cx = gridX + i * colW + colW / 2f
+        val ty = headerH / 2f + dayPaint.textSize * 0.38f
+        canvas.drawText(day, cx, ty, dayPaint)
     }
-    canvas.drawLine(timeColW + days.size * colW, 0f, timeColW + days.size * colW, totalH.toFloat(), gridPaint)
-    canvas.drawLine(0f, headerH, totalW.toFloat(), headerH, gridPaint)
 
-    // Hour lines + labels
+    // ── Grid lines ────────────────────────────────────────────────────────────
+    // Horizontal divider under header
+    canvas.drawLine(0f, headerH, totalW.toFloat(), headerH, gridPaint)
+    // Vertical column dividers
+    for (i in 0..days.size) {
+        val x = gridX + i * colW
+        canvas.drawLine(x, headerH, x, totalH.toFloat(), gridPaint)
+    }
+    // Horizontal hour lines + time labels
     for (h in startHour..endHour) {
         val y = headerH + (h - startHour) * hourPx
-        canvas.drawLine(0f, y, totalW.toFloat(), y, gridPaint)
-        textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("%d:00".format(h), timeColW - 6f, y + 20f, textPaint)
+        canvas.drawLine(gridX, y, totalW.toFloat(), y, gridPaint)
+        canvas.drawText(
+            String.format(Locale.US, "%d:00", h),
+            gridX - 4f.dp(),
+            y + timePaint.textSize * 0.38f,
+            timePaint
+        )
     }
 
-    // Course color map
+    // ── Course blocks ─────────────────────────────────────────────────────────
     val colorMap = mutableMapOf<String, Int>()
     courses.distinctBy { it.code }.forEachIndexed { i, c ->
         colorMap[c.code] = courseColorInts[i % courseColorInts.size]
     }
 
-    val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val cornerR   = 10f.dp()
+    val insetFrac = 0.04f    // columnWidth * 0.04 – same as TimetableView
+
     for (course in courses) {
-        val color = colorMap[course.code] ?: courseColorInts[0]
-        blockPaint.color = color
-        for (day in course.section.days) {
+        blockFill.color = colorMap[course.code] ?: courseColorInts[0]
+
+        course.section.days.forEach { day ->
             val di = days.indexOf(day)
-            if (di < 0) continue
+            if (di < 0) return@forEach
+
             val startF = course.section.startTime.toFloat()
-            val endF = course.section.endTime.toFloat()
-            if (endF <= startF) continue
-            val left = timeColW + di * colW + 4f
-            val top = headerH + (startF - startHour) * hourPx + 2f
-            val right = left + colW - 8f
-            val bottom = headerH + (endF - startHour) * hourPx - 2f
-            canvas.drawRoundRect(RectF(left, top, right, bottom), 12f, 12f, blockPaint)
-            blockTextPaint.textAlign = Paint.Align.CENTER
-            val cx = (left + right) / 2f
-            canvas.drawText(course.code, cx, top + 30f, blockTextPaint)
-            subTextPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(course.section.component, cx, top + 54f, subTextPaint)
+            val endF   = course.section.endTime.toFloat()
+            if (endF <= startF) return@forEach
+
+            val left   = gridX + di * colW + colW * insetFrac
+            val right  = gridX + (di + 1) * colW - colW * insetFrac
+            val top    = headerH + (startF - startHour) * hourPx + 2f.dp()
+            val bottom = headerH + (endF   - startHour) * hourPx - 2f.dp()
+            val cx     = (left + right) / 2f
+            val blockH = bottom - top
+            val midY   = top + blockH / 2f
+
+            canvas.drawRoundRect(RectF(left, top, right, bottom), cornerR, cornerR, blockFill)
+
+            when {
+                blockH >= 56f.dp() -> {
+                    // 3 lines: code · component · time range
+                    canvas.drawText(course.code, cx,
+                        midY - titlePaint.textSize, titlePaint)
+                    canvas.drawText(course.section.component, cx,
+                        midY + compPaint.textSize * 0.1f, compPaint)
+                    canvas.drawText("${course.section.startTime}-${course.section.endTime}", cx,
+                        midY + compPaint.textSize * 1.4f, timePaint2)
+                }
+                blockH >= 32f.dp() -> {
+                    // 2 lines: code · component
+                    canvas.drawText(course.code, cx,
+                        midY - titlePaint.textSize * 0.4f, titlePaint)
+                    canvas.drawText(course.section.component, cx,
+                        midY + compPaint.textSize * 0.9f, compPaint)
+                }
+                else -> {
+                    // 1 line: code only
+                    canvas.drawText(course.code, cx,
+                        midY + titlePaint.textSize * 0.38f, titlePaint)
+                }
+            }
         }
     }
+
     return bmp
 }
 
+
 private fun saveBitmapToDownloads(context: Context, bmp: Bitmap): Boolean {
     return try {
+        val filename = "timetable_${System.currentTimeMillis()}.png"
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "timetable.png")
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
         }
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
-        resolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        resolver.openOutputStream(uri)?.use { stream ->
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        }
         true
     } catch (e: Exception) {
         false
+    } finally {
+        bmp.recycle()
     }
 }
 
@@ -263,6 +280,7 @@ fun HomeScreen(
     val primaryYellow = Color(0xFFFFD700)
     val lightBackground = Color(0xFFFDFDFD)
     val context = LocalContext.current
+    val screenDensity = LocalDensity.current.density
     val coroutineScope = rememberCoroutineScope()
 
     val scheduledCourses by rememberUpdatedState(AppState.scheduledCourses.toList())
@@ -400,57 +418,22 @@ fun HomeScreen(
             containerColor = Color.White,
             shape = RoundedCornerShape(20.dp),
             title = {
-                Text("Export Timetable", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Export as Image", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
-                    // Option 1: iCalendar
+                    // Export as Image
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 showExportSheet = false
                                 coroutineScope.launch {
-                                    val ics = buildIcsContent(scheduledCourses)
-                                    val ok = withContext(Dispatchers.IO) { saveIcsToDownloads(context, ics) }
-                                    Toast.makeText(
-                                        context,
-                                        if (ok) "timetable.ics saved to Downloads" else "Export failed",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7)),
-                        elevation = CardDefaults.cardElevation(0.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("📅", fontSize = 24.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("iCalendar File (.ics)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text("Import into Google / Apple Calendar", fontSize = 12.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Option 2: Image
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                showExportSheet = false
-                                coroutineScope.launch {
-                                    val bmp = withContext(Dispatchers.Default) { renderTimetableBitmap(scheduledCourses) }
+                                    val bmp = withContext(Dispatchers.Default) { renderTimetableBitmap(scheduledCourses, screenDensity) }
                                     val ok = withContext(Dispatchers.IO) { saveBitmapToDownloads(context, bmp) }
                                     Toast.makeText(
                                         context,
-                                        if (ok) "timetable.png saved to Downloads" else "Export failed",
+                                        if (ok) "Timetable saved to Pictures" else "Export failed — check storage permission",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -1309,7 +1292,8 @@ private fun hasTimeConflict(courses: List<Course>): Boolean {
 fun TimetableView(
     courses: List<Course>,
     courseColors: Map<String, Color>,
-    onRemoveCourse: (Course) -> Unit
+    onRemoveCourse: (Course) -> Unit,
+    readOnly: Boolean = false
 ) {
     val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
     val startHour = 8
@@ -1523,10 +1507,12 @@ fun TimetableView(
                     }
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = { onRemoveCourse(course); selectedCourse = null },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
-                    ) { Text("Remove") }
+                    if (!readOnly) {
+                        TextButton(
+                            onClick = { onRemoveCourse(course); selectedCourse = null },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                        ) { Text("Remove") }
+                    }
                 },
                 dismissButton = {
                     TextButton(onClick = { selectedCourse = null }) { Text("Close") }

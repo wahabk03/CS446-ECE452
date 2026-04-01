@@ -2,7 +2,9 @@
 package com.example.graphicaltimeplanner
 
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
 
 data class Timetable(
     val id: String,
@@ -18,6 +20,22 @@ object AppState {
     // ── Multiple timetables ───────────────────────────────────────────────────
     val timetables = mutableStateListOf<Timetable>()
     val activeTimetableId = mutableStateOf<String?>(null)
+
+    // ── Preference screen: selected courses + pinned sections (persists across navigation, cleared on logout) ──
+    val selectedCourseCodes = mutableStateSetOf<String>()
+    // Key = "$courseCode||$componentType", value = the pinned Section
+    val selectedSections    = mutableStateMapOf<String, Section>()
+    // Course data cache: key = "$term||$subject" → list of courses fetched from Firestore.
+    // Lives in AppState so it survives navigation; cleared on logout so stale data
+    // never outlasts a session.
+    val courseCache         = mutableStateMapOf<String, List<Course>>()
+
+    // ── Preference screen: scheduling preferences (persists across navigation, cleared on logout) ──
+    val avoidEarlyClasses = mutableStateOf(false)
+    val earlyClassCutoff  = mutableStateOf(10)    // hour (24-h); classes starting before this are "early"
+    val minimizeGaps      = mutableStateOf(false)
+    val clusterDays       = mutableStateMapOf("Mon" to false, "Tue" to false, "Wed" to false, "Thu" to false, "Fri" to false)
+    val maxDailyHours     = mutableStateOf(8f)
 
     // ── User info ─────────────────────────────────────────────────────────────
     val displayName = mutableStateOf("")
@@ -42,5 +60,13 @@ object AppState {
         timetables.clear()
         activeTimetableId.value = null
         displayName.value = ""
+        selectedCourseCodes.clear()
+        selectedSections.clear()
+        courseCache.clear()
+        avoidEarlyClasses.value = false
+        earlyClassCutoff.value  = 10
+        minimizeGaps.value      = false
+        clusterDays.keys.forEach { clusterDays[it] = false }
+        maxDailyHours.value     = 8f
     }
 }
