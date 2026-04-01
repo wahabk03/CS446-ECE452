@@ -5,6 +5,7 @@ import base64
 import tempfile
 import uuid
 import re
+import time
 from agent import Agent
 from tools import read_uploaded_file, browse_online, browse_uwflow, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
 from firebase_admin import firestore
@@ -13,6 +14,7 @@ from typing import Optional, Tuple
 app = Flask(__name__)
 
 MUTATION_TOOLS = {"create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"}
+_SYSTEM_PROMPT_CACHE = None
 
 
 def _normalize_advisor_response(text: str) -> str:
@@ -58,6 +60,21 @@ def _build_base_messages(system_prompt: str, history: list, user_message: str) -
         messages.append({"role": msg.get("role"), "content": msg.get("content")})
     messages.append({"role": "user", "content": user_message})
     return messages
+
+
+def _load_system_prompt() -> str:
+    global _SYSTEM_PROMPT_CACHE
+    if _SYSTEM_PROMPT_CACHE is not None:
+        return _SYSTEM_PROMPT_CACHE
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sys_prompt_path = os.path.join(current_dir, "system_prompt.txt")
+    system_prompt = "You are a helpful academic assistant."
+    if os.path.exists(sys_prompt_path):
+        with open(sys_prompt_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+    _SYSTEM_PROMPT_CACHE = system_prompt
+    return system_prompt
 
 
 def _prepare_attached_content(file_name: str, file_bytes_base64: Optional[str]) -> Optional[str]:
@@ -182,14 +199,10 @@ def _tool_progress_message(uid: str, func_name: str, args: dict) -> str:
 
 
 def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_bytes_base64: Optional[str], on_event=None):
+    total_start = time.perf_counter()
     agent = Agent()
 
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    sys_prompt_path = os.path.join(current_dir, "system_prompt.txt")
-    system_prompt = "You are a helpful academic assistant."
-    if os.path.exists(sys_prompt_path):
-        with open(sys_prompt_path, "r", encoding="utf-8") as f:
-            system_prompt = f.read()
+    system_prompt = _load_system_prompt()
 
     messages = _build_base_messages(system_prompt, history, user_message)
     attached_content = _prepare_attached_content(file_name, file_bytes_base64)
@@ -197,9 +210,15 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
     show_button = False
     had_mutation_success = False
     had_mutation_error = False
+    llm_round_ms = []
+    tool_stats = []
+    loop_count = 0
 
     while True:
+        llm_start = time.perf_counter()
         response_msg = agent.chat(messages, attached_file_content=attached_content, tools=TOOLS_SCHEMA)
+        llm_round_ms.append(round((time.perf_counter() - llm_start) * 1000, 1))
+        loop_count += 1
         attached_content = None
         messages.append(response_msg)
 
@@ -225,6 +244,7 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
                 args["uid"] = uid
 
             tool_response = "Error: Tool execution failed"
+            tool_start = time.perf_counter()
             try:
                 if func_name == "browse_online":
                     tool_response = browse_online(**args)
@@ -253,6 +273,13 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
             except Exception as e:
                 tool_response = f"Error executing {func_name}: {e}"
 
+            tool_elapsed_ms = round((time.perf_counter() - tool_start) * 1000, 1)
+            tool_stats.append({
+                "name": func_name,
+                "duration_ms": tool_elapsed_ms,
+                "ok": not _is_tool_error_response(tool_response)
+            })
+
             if func_name in MUTATION_TOOLS:
                 if _is_tool_error_response(tool_response):
                     had_mutation_error = True
@@ -272,10 +299,19 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
             })
 
     final_response = _normalize_advisor_response(response_msg.get("content", ""))
+    metrics = {
+        "total_ms": round((time.perf_counter() - total_start) * 1000, 1),
+        "llm_rounds": len(llm_round_ms),
+        "llm_round_ms": llm_round_ms,
+        "tool_calls": len(tool_stats),
+        "tool_stats": tool_stats,
+        "loop_count": loop_count
+    }
     return {
         "response": final_response,
         "history": messages,
-        "show_button": show_button
+        "show_button": show_button,
+        "metrics": metrics
     }
 
 
@@ -323,6 +359,7 @@ def generate_email():
     if not issue:
         return jsonify({"error": "issue is required"}), 400
 
+    total_start = time.perf_counter()
     agent = Agent()
     system_prompt = (
         "You are an academic-email drafting assistant. Write professional advisor emails that strictly preserve "
@@ -360,10 +397,12 @@ def generate_email():
     )
 
     try:
+        llm_start = time.perf_counter()
         response_msg = agent.chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ])
+        llm_ms = round((time.perf_counter() - llm_start) * 1000, 1)
         content = response_msg.get("content", "")
         parsed = _parse_email_json(content)
 
@@ -371,7 +410,14 @@ def generate_email():
             subject = str(parsed.get("subject", "")).strip()
             body = str(parsed.get("body", "")).strip()
             if subject and body:
-                return jsonify({"subject": subject, "body": body}), 200
+                return jsonify({
+                    "subject": subject,
+                    "body": body,
+                    "metrics": {
+                        "total_ms": round((time.perf_counter() - total_start) * 1000, 1),
+                        "llm_ms": llm_ms
+                    }
+                }), 200
 
         # Fallback if model returns non-JSON or incomplete JSON
         fallback_body = (
@@ -387,7 +433,11 @@ def generate_email():
         )
         return jsonify({
             "subject": "Request for Academic Advising Assistance",
-            "body": fallback_body
+            "body": fallback_body,
+            "metrics": {
+                "total_ms": round((time.perf_counter() - total_start) * 1000, 1),
+                "llm_ms": llm_ms
+            }
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -426,14 +476,9 @@ def chat_stream():
             return f"{payload}\n"
 
         try:
+            total_start = time.perf_counter()
             agent = Agent()
-
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            sys_prompt_path = os.path.join(current_dir, "system_prompt.txt")
-            system_prompt = "You are a helpful academic assistant."
-            if os.path.exists(sys_prompt_path):
-                with open(sys_prompt_path, "r", encoding="utf-8") as f:
-                    system_prompt = f.read()
+            system_prompt = _load_system_prompt()
 
             messages = _build_base_messages(system_prompt, history, user_message)
             attached_content = _prepare_attached_content(file_name, file_bytes_base64)
@@ -441,9 +486,15 @@ def chat_stream():
             show_button = False
             had_mutation_success = False
             had_mutation_error = False
+            llm_round_ms = []
+            tool_stats = []
+            loop_count = 0
 
             while True:
+                llm_start = time.perf_counter()
                 response_msg = agent.chat(messages, attached_file_content=attached_content, tools=TOOLS_SCHEMA)
+                llm_round_ms.append(round((time.perf_counter() - llm_start) * 1000, 1))
+                loop_count += 1
                 attached_content = None
                 messages.append(response_msg)
 
@@ -468,6 +519,7 @@ def chat_stream():
                         args["uid"] = uid
 
                     tool_response = "Error: Tool execution failed"
+                    tool_start = time.perf_counter()
                     try:
                         if func_name == "browse_online":
                             tool_response = browse_online(**args)
@@ -496,6 +548,13 @@ def chat_stream():
                     except Exception as e:
                         tool_response = f"Error executing {func_name}: {e}"
 
+                    tool_elapsed_ms = round((time.perf_counter() - tool_start) * 1000, 1)
+                    tool_stats.append({
+                        "name": func_name,
+                        "duration_ms": tool_elapsed_ms,
+                        "ok": not _is_tool_error_response(tool_response)
+                    })
+
                     if func_name in MUTATION_TOOLS:
                         if _is_tool_error_response(tool_response):
                             had_mutation_error = True
@@ -519,7 +578,15 @@ def chat_stream():
             yield emit({
                 "type": "final",
                 "response": final_response,
-                "show_button": show_button
+                "show_button": show_button,
+                "metrics": {
+                    "total_ms": round((time.perf_counter() - total_start) * 1000, 1),
+                    "llm_rounds": len(llm_round_ms),
+                    "llm_round_ms": llm_round_ms,
+                    "tool_calls": len(tool_stats),
+                    "tool_stats": tool_stats,
+                    "loop_count": loop_count
+                }
             })
         except Exception as e:
             yield emit({"type": "error", "message": str(e)})

@@ -3,6 +3,9 @@ import requests
 from llm_config import LLM_CONFIG
 from llm_config import SERPAPI_API_KEY
 
+_HTTP_SESSION = requests.Session()
+_LLM_REQUEST_TIMEOUT_SECS = 45
+
 class Agent:
     def __init__(self):
         self.api_key = LLM_CONFIG["config_list"][0]["api_key"]
@@ -96,7 +99,12 @@ class Agent:
         
         url = f"{self.base_url}/chat/completions"
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            response = _HTTP_SESSION.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=_LLM_REQUEST_TIMEOUT_SECS
+            )
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]

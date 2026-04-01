@@ -5,6 +5,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from llm_config import SERPAPI_API_KEY
 
+_HTTP_SESSION = requests.Session()
+_SERPAPI_TIMEOUT_SECS = 20
+
 # Initialize firebase admin if not already initialized
 if not firebase_admin._apps:
     cred = credentials.Certificate("serviceAccountKey.json")
@@ -62,7 +65,7 @@ def browse_online(query: str) -> str:
         "api_key": SERPAPI_API_KEY
     }
     try:
-        response = requests.get(url, params=params)
+        response = _HTTP_SESSION.get(url, params=params, timeout=_SERPAPI_TIMEOUT_SECS)
         response.raise_for_status()
         results = response.json()
         snippets = []
@@ -90,7 +93,7 @@ def browse_uwflow(query: str) -> str:
     }
 
     try:
-        response = requests.get(url, params=params)
+        response = _HTTP_SESSION.get(url, params=params, timeout=_SERPAPI_TIMEOUT_SECS)
         response.raise_for_status()
         results = response.json()
 
@@ -211,8 +214,11 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
             user_doc = db.collection("users").document(uid).get()
             user_data = user_doc.to_dict() or {} if user_doc.exists else {}
 
-            # Prefer explicit target_id; otherwise fallback to user's selected major info.
-            requested = (target_id or user_data.get("major") or user_data.get("majorName") or "").strip()
+            # Always prioritize the user's saved major to avoid invalid program IDs
+            # being passed by model-generated tool arguments.
+            user_major = str(user_data.get("major") or "").strip()
+            user_major_name = str(user_data.get("majorName") or "").strip()
+            requested = user_major or user_major_name or str(target_id or "").strip()
             if not requested:
                 return {
                     "message": "No major specified. Provide target_id or save your major in profile first.",
