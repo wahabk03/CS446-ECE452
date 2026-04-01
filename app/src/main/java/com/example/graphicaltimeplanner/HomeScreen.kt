@@ -1318,7 +1318,13 @@ fun TimetableView(
     val primaryYellow = Color(0xFFFFD700)
     val conflictRed = Color(0xFFE53935)
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
-    val conflictSpans = remember(courses) { findConflictSpans(courses, days) }
+    val (onlineCourses, timedCourses) = remember(courses) {
+        courses.partition { course ->
+            val section = course.section
+            section.days.isEmpty() || section.endTime.toFloat() <= section.startTime.toFloat()
+        }
+    }
+    val conflictSpans = remember(timedCourses) { findConflictSpans(timedCourses, days) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1341,6 +1347,74 @@ fun TimetableView(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(day, fontWeight = FontWeight.Bold, color = primaryYellow, fontSize = 15.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+
+            if (onlineCourses.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(timeColumnWidth)
+                            .padding(end = 6.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = "Online",
+                            fontSize = 11.sp,
+                            color = Color(0xFF888888),
+                            textAlign = TextAlign.End
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFAFAFA), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        onlineCourses.forEach { course ->
+                            val color = courseColors[course.code] ?: primaryYellow
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedCourse = course },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = color),
+                                elevation = CardDefaults.cardElevation(1.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = course.code,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Start
+                                    )
+                                    Text(
+                                        text = course.section.component,
+                                        fontSize = 10.sp,
+                                        color = Color.Black.copy(alpha = 0.75f),
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1375,7 +1449,7 @@ fun TimetableView(
                                 }
                             }
                     ) {
-                        courses.forEach { course ->
+                        timedCourses.forEach { course ->
                             course.section.days.forEach { dayStr ->
                                 val dayIdx = days.indexOf(dayStr)
                                 if (dayIdx < 0) return@forEach
@@ -1438,7 +1512,12 @@ fun TimetableView(
                 text = {
                     Column {
                         Text("Title: ${course.title}")
-                        Text("Time: ${course.section.days.joinToString(", ")} ${course.section.startTime}–${course.section.endTime}")
+                        val detailTime = if (course.section.days.isEmpty()) {
+                            "Online / TBA"
+                        } else {
+                            "${course.section.days.joinToString(", ")} ${course.section.startTime}–${course.section.endTime}"
+                        }
+                        Text("Time: $detailTime")
                         Text("Location: ${course.section.location}")
                         Text("Units: ${course.units}")
                     }
