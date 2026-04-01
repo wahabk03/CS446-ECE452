@@ -281,6 +281,10 @@ fun HomeScreen(
     val promptYearLevels = listOf("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B")
     var promptSaving by remember { mutableStateOf(false) }
     var promptDropdownExpanded by remember { mutableStateOf(false) }
+    var promptMajors by remember { mutableStateOf<List<Major>>(emptyList()) }
+    var promptMajorSearchQuery by remember { mutableStateOf("") }
+    var promptSelectedMajor by remember { mutableStateOf<Major?>(null) }
+    var promptMajorDropdownExpanded by remember { mutableStateOf(false) }
 
     // Show prompt only when the user has not selected a program yet.
     LaunchedEffect(Unit) {
@@ -288,6 +292,7 @@ fun HomeScreen(
         val programSlug = profile["program"] as? String
         if (programSlug.isNullOrBlank()) {
             promptPrograms = CourseRepository.getPrograms()
+            promptMajors = CourseRepository.getMajors()
             showProgramPrompt = true
         }
     }
@@ -594,6 +599,83 @@ fun HomeScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("Major (optional)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = promptMajorSearchQuery,
+                        onValueChange = {
+                            promptMajorSearchQuery = it
+                            promptSelectedMajor = null
+                            promptMajorDropdownExpanded = true
+                        },
+                        placeholder = {
+                            Text(
+                                promptSelectedMajor?.name ?: "Search major...",
+                                color = if (promptSelectedMajor != null) Color(0xFF444444) else Color.Gray,
+                                fontSize = 14.sp
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { if (it.isFocused) promptMajorDropdownExpanded = true },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = primaryYellow,
+                            cursorColor = primaryYellow
+                        )
+                    )
+
+                    if (promptMajorDropdownExpanded && promptMajors.isNotEmpty()) {
+                        val filteredMajors = if (promptMajorSearchQuery.isBlank()) {
+                            promptMajors.take(6)
+                        } else {
+                            promptMajors.filter {
+                                it.name.contains(promptMajorSearchQuery, ignoreCase = true)
+                            }.take(6)
+                        }
+                        if (filteredMajors.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    filteredMajors.forEach { major ->
+                                        Text(
+                                            major.name,
+                                            fontSize = 13.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    promptSelectedMajor = major
+                                                    promptMajorSearchQuery = ""
+                                                    promptMajorDropdownExpanded = false
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (promptSelectedMajor != null && !promptMajorDropdownExpanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Selected: ${promptSelectedMajor!!.name}",
+                            fontSize = 13.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -615,6 +697,14 @@ fun HomeScreen(
                                         "yearLevelLabel" to promptSelectedYear
                                     )
                                 )
+                                if (promptSelectedMajor != null) {
+                                    CourseRepository.saveUserExtendedProfile(
+                                        mapOf(
+                                            "major" to promptSelectedMajor!!.slug,
+                                            "majorName" to promptSelectedMajor!!.name
+                                        )
+                                    )
+                                }
                                 CourseRepository.getAdvisors(forceRefresh = true)
                                 promptSaving = false
                                 showProgramPrompt = false
