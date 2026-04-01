@@ -131,9 +131,12 @@ fun CourseScreen(
     val filteredGroups = remember(groupedCourses, searchQuery) {
         if (searchQuery.isBlank()) groupedCourses
         else {
-            val q = searchQuery.lowercase()
+            // Normalise: collapse all spaces so "CS101", "CS 101", "cs 101" all match.
+            val qNorm      = searchQuery.trim().lowercase().replace(" ", "")
+            val qOriginal  = searchQuery.trim().lowercase()
             groupedCourses.filter {
-                it.code.lowercase().contains(q) || it.title.lowercase().contains(q)
+                val codeNorm = it.code.lowercase().replace(" ", "")
+                codeNorm.contains(qNorm) || it.title.lowercase().contains(qOriginal)
             }
         }
     }
@@ -601,8 +604,13 @@ fun ExpandableCourseGroup(
 
                             Button(
                                 onClick = {
-                                    pendingByType = pendingByType.toMutableMap().apply {
-                                        this[section.componentType] = section
+                                    pendingByType = if (isSelected) {
+                                        // Clicking "Selected" again → deselect this section type
+                                        pendingByType.toMutableMap().apply { remove(section.componentType) }
+                                    } else {
+                                        pendingByType.toMutableMap().apply {
+                                            this[section.componentType] = section
+                                        }
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
