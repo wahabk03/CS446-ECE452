@@ -4,7 +4,6 @@ from llm_config import LLM_CONFIG
 from llm_config import SERPAPI_API_KEY
 
 _HTTP_SESSION = requests.Session()
-_LLM_REQUEST_TIMEOUT_SECS = 45
 
 class Agent:
     def __init__(self):
@@ -102,8 +101,7 @@ class Agent:
             response = _HTTP_SESSION.post(
                 url,
                 headers=headers,
-                json=payload,
-                timeout=_LLM_REQUEST_TIMEOUT_SECS
+                json=payload
             )
             response.raise_for_status()
             data = response.json()

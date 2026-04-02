@@ -18,7 +18,7 @@ object AgentApi {
     private const val CHAT_STREAM_URL = "http://10.0.2.2:5000/chat_stream"
     private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
     private const val GENERATE_EMAIL_URL = "http://10.0.2.2:5000/generate_email"
-    private const val READ_TIMEOUT_MS = 120000
+    private const val READ_TIMEOUT_MS = 0
     private const val CONNECT_TIMEOUT_MS = 30000
     private const val MAX_RETRIES = 2
 
