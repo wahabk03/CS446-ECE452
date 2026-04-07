@@ -1,4 +1,4 @@
-# Graphical Time Planner — UWaterloo Course Scheduler 
+# 🎓 Graphical Time Planner — UWaterloo Course Scheduler
 
 > **Team InsertNameHere** · Khan Wahab · Jialun Li · Daniel Yim · Julian Kwan · Ariel Wong · Antony Zhao  
 > *CS 446 / ECE 452 — Winter 2026*
@@ -44,6 +44,60 @@ The app monitors the UWaterloo course database every 6 hours and sends **Firebas
 
 ### 🎓 Advisor Finder
 Look up academic advisors by program and year level. Select an advisor and the AI generates a **personalized email draft** on your behalf — optionally including your current timetable for context.
+
+---
+
+## 🎬 App Demo & User Scenarios
+
+Three short videos walk through the app's major features. Each can be watched independently.
+
+---
+
+### 📹 Video 1 — Course Search & Preference-Based Schedule Generation
+
+📽️ **[Watch Video 1 →](#)**
+
+Meet **Alex**, a 2B Software Engineering student building their Winter 2026 timetable. They have a few required courses locked in and a wishlist of electives — but no idea how to fit everything without early mornings or a fragmented week.
+
+**Step 1 — Search and add courses manually**  
+Alex opens the Course screen, selects the Winter 2026 term, and searches for `ECE 222`. They browse the available sections, pick one, and tap Add. The app instantly checks for conflicts — when Alex accidentally picks an overlapping section for `MATH 213`, a warning appears immediately. They swap to a compatible section and the grid updates.
+
+**Step 2 — Build a wishlist for electives**  
+Alex heads to the **Assistant** tab and adds `ECON 101` and `PSYCH 207` to their wishlist. They pin a preferred lecture section for one course but leave the other open for the generator to decide.
+
+**Step 3 — Set preferences and generate**  
+Alex configures their preferences: no classes before 9 AM, minimize gaps between lectures, cluster everything onto four days, and cap at 6 hours per day. They hit Generate — the genetic algorithm runs and surfaces a ranked list of conflict-free timetable permutations. Alex browses the top results, picks their favourite, and exports it directly to their timetable with one tap.
+
+---
+
+### 📹 Video 2 — Push Notifications & Advisor Email Generation
+
+📽️ **[Watch Video 2 →](#)**
+
+Two weeks into the term, the app keeps Alex informed without any effort on their part.
+
+**Push Notifications**  
+The app polls the UWaterloo course database every 6 hours. When `ECE 222 LEC 001` moves to a new room, Alex receives a Firebase Cloud Messaging notification immediately — no need to check QUEST. The notification includes the course, what changed, and the new details.
+
+**Finding an Advisor and Drafting an Email**  
+Alex wants to request a course substitution but isn't sure how to phrase it. They open the **Advisor Finder**, select Engineering and their year level, and the app surfaces their academic advisor with contact details. Alex taps "Generate Email" — the AI drafts a professional, contextual email explaining the substitution request. Alex reviews the draft, makes a small edit, and copies it straight to their mail app.
+
+---
+
+### 📹 Video 3 — AI Academic Advisor Chatbot
+
+📽️ **[Watch Video 3 →](#)**
+
+Alex has bigger questions that need more than a search box.
+
+**Step 1 — Upload transcript and check prerequisites**  
+Alex uploads their transcript PDF directly in the chat. They ask: *"Have I completed the prerequisites for CS 341?"* The agent reads the transcript, queries the course database for the full prerequisite chain, and replies with a clear breakdown — `CS 240` and `MATH 239` are both satisfied.
+
+**Step 2 — Get course recommendations**  
+Alex asks: *"What are some good technical electives for a 3A SE student that aren't too heavy? Check UW Flow reviews."* The agent searches UW Flow, weighs ratings and review sentiment, and comes back with three recommendations with reasoning.
+
+**Step 3 — Let the AI modify the timetable directly**  
+Convinced by the recommendation, Alex says: *"Add ECE 358 LEC 001 to my timetable."* The agent calls its `add_course` tool server-side, writes directly to Firebase, and confirms: *"Done — ECE 358 LEC 001 has been added. No conflicts detected."* Alex switches to the Home screen and sees it already there — no manual steps, no copy-pasting.
 
 ---
 
