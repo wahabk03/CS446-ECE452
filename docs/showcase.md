@@ -1,101 +1,98 @@
 # 🎓 Graphical Time Planner — UWaterloo Course Scheduler
 
-> **Team InsertNameHere** · Khan Wahab · Julian Kwan · Jialun Li · Ariel Wong · Daniel Yim · Antony Zhao
+> **Team InsertNameHere** · Khan Wahab · Jialun Li · Daniel Yim · Julian Kwan · Ariel Wong · Antony Zhao  
+> *CS 446 / ECE 452 — Winter 2026*
 
 ---
 
 ## The Problem We Solved
 
-Every UWaterloo student knows the dread of course selection season: juggling prerequisites, time conflicts, graduation requirements, and QUEST's clunky interface — all at once. Existing tools are either too rigid (official QUEST scheduler) or too manual (spreadsheets, sticky notes, hope).
+Every UWaterloo student knows the dread of course selection season: juggling prerequisites, time conflicts, graduation requirements, and QUEST's clunky interface — all at once. Existing tools are either too rigid or too manual.
 
-**Graphical Time Planner** is a full-stack Android app that replaces that chaos with one intelligent, visual, AI-powered system.
+**Graphical Time Planner** is a full-stack Android app that replaces that chaos with one intelligent, visual, AI-powered system — built from scratch over 12 weeks.
 
 ---
 
 ## ✨ Key Features
 
 ### 📅 Visual Timetable
-An interactive weekly calendar that shows your schedule at a glance. Add, remove, and reorganize courses across semesters with drag-and-drop ease. Export your finished schedule as a **PNG image** or **`.ics` calendar file** to import directly into Google Calendar or Apple Calendar.
+An interactive, color-coded weekly grid that shows your schedule at a glance. The app supports **multiple named timetables per term** so you can compare options side by side. Automatic conflict detection warns you the moment two courses overlap. When you're happy with your schedule, export it as a **PNG image** to share with friends or advisors.
 
-### 🤖 Smart Schedule Generator (Assistant)
-Build a wishlist of courses you *want* to take — the Assistant does the rest. Powered by a **Depth-First Search algorithm**, it automatically generates all valid, conflict-free schedule permutations from your wishlist. You pick the one you like and export it straight to your Timetable.
+### 🤖 AI-Powered Schedule Generator
+Build a wishlist of courses you want to take, then let the generator do the work. A **genetic algorithm** explores the space of valid schedule permutations and surfaces the best ones based on your personal preferences:
 
-> Filter by preferences (time of day, days off, section types) to narrow down results to schedules that actually fit your life.
+- ☀️ Avoid early morning classes
+- ⏱️ Minimize gaps between lectures
+- 📆 Cluster classes onto fewer days
+- 🕐 Cap maximum daily hours
 
-### 🧠 AI Agent Chatbot
-This is where the app goes beyond a scheduler into a **personal academic assistant**. The AI chatbot can:
+Pin preferred sections, tweak the weights, and export your favorite result directly into your timetable — no copy-pasting.
 
-- 💬 Answer questions about your current schedule, conflicts, or workload
-- 📄 **Read your transcript PDF** to understand what you've already completed
-- 🔍 Check prerequisite chains for any course
-- 📧 Draft emails to professors or academic advisors on your behalf
-- 🛠️ **Directly modify your Firebase timetable** — add or remove courses through natural conversation
+### 🧠 AI Academic Advisor Chatbot
+This is where the app goes well beyond a scheduler. The LLM-powered chatbot has **direct tool access** to your data and can:
 
-The chatbot is backed by a **Flask REST API** (Python) that securely proxies all Firebase operations and LLM calls, keeping your data safe while enabling rich agentic workflows.
+- 💬 Answer questions about courses, prerequisites, and graduation requirements
+- 📄 **Parse your uploaded transcript PDF** to understand your academic history
+- 🔍 Pull real student reviews from **UW Flow**
+- 🛠️ **Directly create, modify, and clear your timetable** — no manual steps needed
+- 📧 Draft contextual emails to your academic advisor, with your schedule attached
 
-### 🎓 Advisor Directory
-Quick links to academic advisors by faculty, so you can get human help when the AI isn't enough.
+Responses stream in real time. Chat sessions are saved with full history — create, rename, and revisit sessions at any time.
 
-### 🔔 Smart Notifications
-Get notified about important course updates and schedule changes, even when the app is in the background.
+### 🔔 Push Notifications
+The app monitors the UWaterloo course database every 6 hours and sends **Firebase Cloud Messaging** alerts if any of your enrolled courses change — time, location, section cancellation, or new section added. On logout, all topic subscriptions are automatically cleared so notifications never leak to the next user on the device.
+
+### 🎓 Advisor Finder
+Look up academic advisors by program and year level. Select an advisor and the AI generates a **personalized email draft** on your behalf — optionally including your current timetable for context.
 
 ---
 
 ## 🏗️ Architecture
 
+The app uses two architectural styles working in concert:
+
+**Client-Server** — The Android client handles all UI and direct Firestore CRUD. An AI chat interaction goes: Android → Flask backend (Python, port 5000) → LLM with tool access → Firestore write → streamed JSON events back to Android. All timetable mutations from the AI are executed server-side with the Firebase UID injected by the backend, so clients can never spoof write operations.
+
+**MVVM** — Inside the Android app, `AppState` and `ChatStateManager` act as reactive ViewModels using Compose's `mutableStateOf`. Screens observe state and recompose automatically — when the AI chatbot adds a course via a server tool, the timetable view updates instantly with no coordination code needed. `CourseRepository` and `ChatRepository` encapsulate all Firestore logic behind a clean Facade, so no screen ever touches a Firestore collection path directly.
+
 ```
-Android App (Kotlin + Jetpack Compose)
+Android App (Kotlin + Jetpack Compose + MVVM)
         │
-        ├── Firebase Firestore  ─── Course database (scraped from UWaterloo)
-        │                       ─── User timetables & auth
+        ├── Firebase Firestore  ── 61 UWaterloo subjects, user timetables, profiles, chat
+        ├── Firebase Auth       ── Email/password authentication
+        ├── Firebase FCM        ── Push notifications for course changes
         │
         └── Flask Backend (Python)
-                ├── LLM Agent  ─── Chat, transcript parsing, recommendations
-                └── Tools      ─── Firebase read/write, web search (SerpAPI)
+                ├── LLM Agent (SiliconFlow API)
+                └── Tools: query courses · read transcript · add/remove courses
+                            browse UW Flow · web search (SerpAPI) · draft emails
 ```
 
-**Tech Stack:**
-- **Frontend**: Kotlin, Jetpack Compose, Material 3
-- **Backend**: Python, Flask, LangChain-style tool-calling agent
-- **Database**: Firebase Firestore + Firebase Auth
-- **AI**: LLM via SiliconFlow API with tool-use support
-- **Data**: Custom Python scrapers for UWaterloo's course catalog & schedule data
-
 ---
 
-## 📸 App Screenshots
+## 📊 By the Numbers
 
-> *(See video demo link below)*
-
-| Screen | Description |
+| Metric | Value |
 |---|---|
-| **Login / Register** | Secure Firebase Auth — sign up or log in |
-| **My Timetable** | Visual weekly grid with color-coded courses |
-| **Assistant** | Wishlist builder + DFS schedule generator |
-| **AI Chatbot** | Chat interface with PDF upload support |
-| **Advisor** | Faculty-sorted advisor directory with email links |
-
----
-
-## 🎬 Demo Video
-
-📽️ **[Watch the App Demo →](#)**
-
-*(Link to be added — video walkthrough of all major features)*
+| UWaterloo subjects supported | **61** |
+| Functional requirements implemented | **20** |
+| AI chatbot tools | **8+** (query, add, delete, clear timetable, browse, search, email, transcript) |
+| Architectural patterns | **2** (Client-Server + MVVM) |
+| Design patterns | **2** (Facade + Observer) |
+| Development timeline | **12 weeks** |
 
 ---
 
 ## 💡 Why Vote For Us?
 
-Most course planners stop at *showing* you a schedule. Ours goes further:
+Most schedulers stop at *showing* you a timetable. Ours goes three steps further:
 
-1. **It talks back** — the AI chatbot understands your history and goals, not just your current courses
-2. **It acts** — the agent can modify your timetable mid-conversation, no manual steps needed
-3. **It thinks ahead** — DFS-powered scheduling with preference filtering finds conflict-free options you'd never spot manually
-4. **It's complete** — scraper → database → Android UI → AI backend, all built from scratch in one semester
+1. **It generates** — a genetic algorithm finds optimal, conflict-free schedules from your wishlist with configurable preference weights, not just brute force
+2. **It talks** — an LLM chatbot understands your transcript, your goals, and your graduation requirements in natural language
+3. **It acts** — the AI agent modifies your actual timetable through server-side tools mid-conversation, with no manual steps from you
 
-We built every layer: the UWaterloo course data scraper, the Firestore schema, the Jetpack Compose UI, and the agentic Python backend. This isn't glue code over an API — it's a full-stack system designed around a real problem every student on this campus faces.
+Every layer was built from scratch: the UWaterloo course scraper, the Firestore schema, the Jetpack Compose UI, the genetic algorithm, and the agentic Python backend with streaming tool-call responses.
 
 ---
 
-*Built with ☕ and determination by Team InsertNameHere — CS 446 / ECE 452, Winter 2025*
+*Built with ☕ and determination by Team InsertNameHere — CS 446 / ECE 452, Winter 2026*
