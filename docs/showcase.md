@@ -1,4 +1,4 @@
-# 🎓 Graphical Time Planner — UWaterloo Course Scheduler
+# Graphical Time Planner — UWaterloo Course Scheduler 
 
 > **Team InsertNameHere** · Khan Wahab · Jialun Li · Daniel Yim · Julian Kwan · Ariel Wong · Antony Zhao  
 > *CS 446 / ECE 452 — Winter 2026*
