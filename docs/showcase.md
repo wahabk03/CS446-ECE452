@@ -55,7 +55,7 @@ Three short videos walk through the app's major features. Each can be watched in
 
 ### 📹 Video 1 — Course Search & Preference-Based Schedule Generation
 
-📽️ **[Watch Video 1 →](#)**
+📽️ **[Watch Video 1 →](https://www.youtube.com/watch?v=-LEMNJkuF4o&t=1s)**
 
 Meet **Alex**, a 2B Software Engineering student building their Winter 2026 timetable. They have a few required courses locked in and a wishlist of electives — but no idea how to fit everything without early mornings or a fragmented week.
 
@@ -72,7 +72,7 @@ Alex configures their preferences: no classes before 9 AM, minimize gaps between
 
 ### 📹 Video 2 — Push Notifications & Advisor Email Generation
 
-📽️ **[Watch Video 2 →](#)**
+📽️ **[Watch Video 2 →](https://www.youtube.com/shorts/CSBcpiZOHYg)**
 
 Two weeks into the term, the app keeps Alex informed without any effort on their part.
 
@@ -86,7 +86,7 @@ Alex wants to request a course substitution but isn't sure how to phrase it. The
 
 ### 📹 Video 3 — AI Academic Advisor Chatbot
 
-📽️ **[Watch Video 3 →](#)**
+📽️ **[Watch Video 3 →](https://www.youtube.com/watch?v=e41-xI4eUeo)**
 
 Alex has bigger questions that need more than a search box.
 
