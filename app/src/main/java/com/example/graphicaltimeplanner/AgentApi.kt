@@ -6,6 +6,7 @@ import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -15,15 +16,42 @@ import java.net.SocketTimeoutException
 import java.net.URL
 
 object AgentApi {
-    private const val CHAT_STREAM_URL = "http://10.0.2.2:5000/chat_stream"
-    private const val SUMMARIZE_URL = "http://10.0.2.2:5000/summarize"
-    private const val GENERATE_EMAIL_URL = "http://10.0.2.2:5000/generate_email"
+    private val agentBaseUrl = BuildConfig.AGENT_BASE_URL.trimEnd('/')
+    private val chatStreamUrl = "$agentBaseUrl/chat_stream"
+    private val summarizeUrl = "$agentBaseUrl/summarize"
+    private val generateEmailUrl = "$agentBaseUrl/generate_email"
     private const val READ_TIMEOUT_MS = 120000
     private const val CONNECT_TIMEOUT_MS = 30000
     private const val MAX_RETRIES = 2
 
     data class AgentResponse(val response: String, val showButton: Boolean)
     data class GeneratedEmailResponse(val subject: String, val body: String)
+
+    private suspend fun requireIdToken(): String {
+        val user = FirebaseAuth.getInstance().currentUser
+            ?: throw IOException("Please sign in before using the AI assistant.")
+        return user.getIdToken(false).await().token
+            ?: throw IOException("Unable to verify your sign-in. Please sign in again.")
+    }
+
+    private fun openAgentConnection(urlString: String, idToken: String): HttpURLConnection {
+        val connection = URL(urlString).openConnection() as HttpURLConnection
+        connection.readTimeout = READ_TIMEOUT_MS
+        connection.connectTimeout = CONNECT_TIMEOUT_MS
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("Authorization", "Bearer $idToken")
+        connection.setRequestProperty("Connection", "close")
+        connection.doOutput = true
+        return connection
+    }
+
+    private fun writeJson(connection: HttpURLConnection, jsonBody: JSONObject) {
+        OutputStreamWriter(connection.outputStream).use { writer ->
+            writer.write(jsonBody.toString())
+            writer.flush()
+        }
+    }
 
     private suspend fun <T> withRetry(block: () -> T): T {
         var attempt = 0
@@ -57,11 +85,9 @@ object AgentApi {
         onToolEvent: ((String) -> Unit)? = null
     ): AgentResponse = withContext(Dispatchers.IO) {
         try {
-            val user = FirebaseAuth.getInstance().currentUser
-            val uid = user?.uid ?: "anonymous"
+            val idToken = requireIdToken()
             
             val jsonBody = JSONObject().apply {
-                put("uid", uid)
                 put("message", message)
                 
                 val historyArray = JSONArray()
@@ -90,20 +116,9 @@ object AgentApi {
             }
 
             return@withContext withRetry {
-                val url = URL(CHAT_STREAM_URL)
-                val connection = url.openConnection() as HttpURLConnection
+                val connection = openAgentConnection(chatStreamUrl, idToken)
                 try {
-                    connection.readTimeout = READ_TIMEOUT_MS
-                    connection.connectTimeout = CONNECT_TIMEOUT_MS
-                    connection.requestMethod = "POST"
-                    connection.setRequestProperty("Content-Type", "application/json")
-                    connection.setRequestProperty("Connection", "close")
-                    connection.doOutput = true
-
-                    val writer = OutputStreamWriter(connection.outputStream)
-                    writer.write(jsonBody.toString())
-                    writer.flush()
-                    writer.close()
+                    writeJson(connection, jsonBody)
 
                     val responseCode = connection.responseCode
                     if (responseCode == HttpURLConnection.HTTP_OK) {
@@ -157,24 +172,14 @@ object AgentApi {
 
     suspend fun summarizeChat(message: String): String = withContext(Dispatchers.IO) {
         try {
+            val idToken = requireIdToken()
             val jsonBody = JSONObject().apply {
                 put("message", message)
             }
             return@withContext withRetry {
-                val url = URL(SUMMARIZE_URL)
-                val connection = url.openConnection() as HttpURLConnection
+                val connection = openAgentConnection(summarizeUrl, idToken)
                 try {
-                    connection.readTimeout = READ_TIMEOUT_MS
-                    connection.connectTimeout = CONNECT_TIMEOUT_MS
-                    connection.requestMethod = "POST"
-                    connection.setRequestProperty("Content-Type", "application/json")
-                    connection.setRequestProperty("Connection", "close")
-                    connection.doOutput = true
-
-                    val writer = OutputStreamWriter(connection.outputStream)
-                    writer.write(jsonBody.toString())
-                    writer.flush()
-                    writer.close()
+                    writeJson(connection, jsonBody)
 
                     val responseCode = connection.responseCode
                     if (responseCode == HttpURLConnection.HTTP_OK) {
@@ -203,6 +208,7 @@ object AgentApi {
         studentId: String?
     ): GeneratedEmailResponse = withContext(Dispatchers.IO) {
         try {
+            val idToken = requireIdToken()
             val jsonBody = JSONObject().apply {
                 put("issue", issue)
                 put("advisor_name", advisorName ?: "")
@@ -213,20 +219,9 @@ object AgentApi {
             }
 
             return@withContext withRetry {
-                val url = URL(GENERATE_EMAIL_URL)
-                val connection = url.openConnection() as HttpURLConnection
+                val connection = openAgentConnection(generateEmailUrl, idToken)
                 try {
-                    connection.readTimeout = READ_TIMEOUT_MS
-                    connection.connectTimeout = CONNECT_TIMEOUT_MS
-                    connection.requestMethod = "POST"
-                    connection.setRequestProperty("Content-Type", "application/json")
-                    connection.setRequestProperty("Connection", "close")
-                    connection.doOutput = true
-
-                    val writer = OutputStreamWriter(connection.outputStream)
-                    writer.write(jsonBody.toString())
-                    writer.flush()
-                    writer.close()
+                    writeJson(connection, jsonBody)
 
                     val responseCode = connection.responseCode
                     val responseStr = if (responseCode == HttpURLConnection.HTTP_OK) {

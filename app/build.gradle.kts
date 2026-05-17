@@ -23,8 +23,20 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "AGENT_BASE_URL", "\"http://10.0.2.2:5000\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             isMinifyEnabled = false
+            val releaseAgentBaseUrl =
+                providers.gradleProperty("AGENT_BASE_URL")
+                    .orElse(providers.environmentVariable("AGENT_BASE_URL"))
+                    .orElse("https://replace-with-your-railway-domain.up.railway.app")
+                    .get()
+                    .trimEnd('/')
+            buildConfigField("String", "AGENT_BASE_URL", "\"$releaseAgentBaseUrl\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -37,6 +49,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

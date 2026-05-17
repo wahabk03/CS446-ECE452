@@ -6,15 +6,108 @@ import tempfile
 import uuid
 import re
 import time
+from collections import defaultdict, deque
 from agent import Agent
 from tools import read_uploaded_file, browse_online, browse_uwflow, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
-from firebase_admin import firestore
+from firebase_admin import auth, firestore
 from typing import Optional, Tuple
 
 app = Flask(__name__)
 
 MUTATION_TOOLS = {"create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"}
 _SYSTEM_PROMPT_CACHE = None
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}")
+
+
+RATE_LIMIT_WINDOW_SECS = _env_int("AGENT_RATE_LIMIT_WINDOW_SECS", 60)
+RATE_LIMIT_MAX_REQUESTS = _env_int("AGENT_RATE_LIMIT_MAX_REQUESTS", 20)
+DAILY_QUOTA_MAX_COST = _env_int("AGENT_DAILY_QUOTA_MAX_COST", 200)
+MAX_TOOL_CALLS_PER_REQUEST = _env_int("AGENT_MAX_TOOL_CALLS_PER_REQUEST", 12)
+
+# Cost units are deliberately abstract. Tune them in Railway without code changes
+# as provider pricing, model choice, and product limits evolve.
+AGENT_USAGE_COSTS = {
+    "summarize": _env_int("AGENT_COST_SUMMARIZE", 1),
+    "generate_email": _env_int("AGENT_COST_GENERATE_EMAIL", 2),
+    "chat": _env_int("AGENT_COST_CHAT", 5),
+    "chat_stream": _env_int("AGENT_COST_CHAT_STREAM", 5),
+}
+
+_rate_limit_hits = defaultdict(deque)
+_daily_usage = {}
+
+
+def _json_error(message: str, status_code: int):
+    return jsonify({"error": message}), status_code
+
+
+def _require_uid():
+    auth_header = request.headers.get("Authorization", "")
+    prefix = "Bearer "
+    if not auth_header.startswith(prefix):
+        return None, _json_error("Missing Authorization bearer token.", 401)
+
+    token = auth_header[len(prefix):].strip()
+    if not token:
+        return None, _json_error("Missing Authorization bearer token.", 401)
+
+    try:
+        decoded = auth.verify_id_token(token)
+    except Exception:
+        return None, _json_error("Invalid or expired sign-in token.", 401)
+
+    uid = decoded.get("uid")
+    if not uid:
+        return None, _json_error("Invalid sign-in token.", 401)
+    return uid, None
+
+
+def _usage_day() -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
+def _check_usage(uid: str, service: str):
+    cost = AGENT_USAGE_COSTS[service]
+    now = time.time()
+    hits = _rate_limit_hits[uid]
+    while hits and now - hits[0] > RATE_LIMIT_WINDOW_SECS:
+        hits.popleft()
+
+    if len(hits) >= RATE_LIMIT_MAX_REQUESTS:
+        return False, _json_error("Too many requests. Please wait a moment and try again.", 429)
+    hits.append(now)
+
+    day = _usage_day()
+    usage = _daily_usage.get(uid)
+    if usage is None or usage["day"] != day:
+        usage = {"day": day, "cost": 0}
+        _daily_usage[uid] = usage
+
+    if usage["cost"] + cost > DAILY_QUOTA_MAX_COST:
+        return False, _json_error("Daily AI usage limit reached. Please try again tomorrow.", 429)
+
+    usage["cost"] += cost
+    return True, None
+
+
+def _check_tool_budget(tool_count: int) -> Optional[dict]:
+    if tool_count <= MAX_TOOL_CALLS_PER_REQUEST:
+        return None
+    return {
+        "error": (
+            "This request needs too many tool actions. Please narrow the request "
+            "or split it into smaller steps."
+        )
+    }
 
 
 def _normalize_advisor_response(text: str) -> str:
@@ -225,6 +318,23 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
             break
 
         for t_call in tool_calls:
+            budget_error = _check_tool_budget(len(tool_stats) + 1)
+            if budget_error:
+                return {
+                    "response": budget_error["error"],
+                    "history": messages,
+                    "show_button": show_button,
+                    "metrics": {
+                        "total_ms": round((time.perf_counter() - total_start) * 1000, 1),
+                        "llm_rounds": len(llm_round_ms),
+                        "llm_round_ms": llm_round_ms,
+                        "tool_calls": len(tool_stats),
+                        "tool_stats": tool_stats,
+                        "loop_count": loop_count,
+                        "stopped_by_tool_budget": True
+                    }
+                }
+
             func_name = t_call["function"]["name"]
             try:
                 args = json.loads(t_call["function"]["arguments"])
@@ -335,6 +445,13 @@ def _parse_email_json(content: str) -> Optional[dict]:
 
 @app.route('/generate_email', methods=['POST'])
 def generate_email():
+    uid, auth_error = _require_uid()
+    if auth_error:
+        return auth_error
+    ok, usage_error = _check_usage(uid, service="generate_email")
+    if not ok:
+        return usage_error
+
     data = request.json or {}
     issue = (data.get("issue") or "").strip()
     advisor_name = (data.get("advisor_name") or "Academic Advisor").strip()
@@ -431,15 +548,21 @@ def generate_email():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    uid = data.get("uid")
+    uid, auth_error = _require_uid()
+    if auth_error:
+        return auth_error
+    ok, usage_error = _check_usage(uid, service="chat")
+    if not ok:
+        return usage_error
+
+    data = request.json or {}
     user_message = data.get("message")
     history = data.get("history", [])
     file_name = data.get("file_name", "")
     file_bytes_base64 = data.get("file_bytes")  # Base64 string from Android if any
 
-    if not uid or not user_message:
-        return jsonify({"error": "uid and message are required"}), 400
+    if not user_message:
+        return jsonify({"error": "message is required"}), 400
 
     result = _run_chat(uid, user_message, history, file_name, file_bytes_base64)
     return jsonify(result)
@@ -447,15 +570,21 @@ def chat():
 
 @app.route('/chat_stream', methods=['POST'])
 def chat_stream():
-    data = request.json
-    uid = data.get("uid")
+    uid, auth_error = _require_uid()
+    if auth_error:
+        return auth_error
+    ok, usage_error = _check_usage(uid, service="chat_stream")
+    if not ok:
+        return usage_error
+
+    data = request.json or {}
     user_message = data.get("message")
     history = data.get("history", [])
     file_name = data.get("file_name", "")
     file_bytes_base64 = data.get("file_bytes")
 
-    if not uid or not user_message:
-        return jsonify({"error": "uid and message are required"}), 400
+    if not user_message:
+        return jsonify({"error": "message is required"}), 400
 
     def generate():
         def emit(event: dict):
@@ -488,6 +617,11 @@ def chat_stream():
                     break
 
                 for t_call in tool_calls:
+                    budget_error = _check_tool_budget(len(tool_stats) + 1)
+                    if budget_error:
+                        yield emit({"type": "error", "message": budget_error["error"]})
+                        return
+
                     func_name = t_call["function"]["name"]
                     try:
                         args = json.loads(t_call["function"]["arguments"])
@@ -569,7 +703,14 @@ def chat_stream():
 
 @app.route('/summarize', methods=['POST'])
 def summarize():
-    data = request.json
+    uid, auth_error = _require_uid()
+    if auth_error:
+        return auth_error
+    ok, usage_error = _check_usage(uid, service="summarize")
+    if not ok:
+        return usage_error
+
+    data = request.json or {}
     user_message = data.get("message")
     
     if not user_message:
