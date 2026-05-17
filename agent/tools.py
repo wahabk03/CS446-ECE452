@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import base64
 import firebase_admin
@@ -10,7 +11,13 @@ _SERPAPI_TIMEOUT_SECS = 20
 
 # Initialize firebase admin if not already initialized
 if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")
+    service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if service_account_json:
+        cred = credentials.Certificate(json.loads(service_account_json))
+    elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        cred = credentials.ApplicationDefault()
+    else:
+        cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
 
 
