@@ -12,6 +12,8 @@ object NotificationHelper {
     private var notificationId = 1000
 
     fun createChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Course Updates",
