@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -323,6 +324,14 @@ fun HomeScreen(
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { /* granted or not, in-app alerts work regardless */ }
+    var hasAskedNotificationPermission by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !hasAskedNotificationPermission) {
+            hasAskedNotificationPermission = true
+            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Timetable dropdown state
     var showTimetableDropdown by remember { mutableStateOf(false) }
@@ -378,11 +387,6 @@ fun HomeScreen(
             .distinct()
         allTopics.forEach {
             com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic(it)
-        }
-
-        // Request notification permission on Android 13+
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
 
         // Detect course changes (in-app sync)

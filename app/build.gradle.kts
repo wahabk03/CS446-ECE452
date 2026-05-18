@@ -4,6 +4,13 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val configuredAgentBaseUrl =
+    providers.gradleProperty("AGENT_BASE_URL")
+        .orElse(providers.environmentVariable("AGENT_BASE_URL"))
+        .orElse("https://cs446-ece452-production.up.railway.app")
+        .get()
+        .trimEnd('/')
+
 android {
     namespace = "com.example.graphicaltimeplanner"
     compileSdk {
@@ -24,18 +31,12 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "AGENT_BASE_URL", "\"http://10.0.2.2:5000\"")
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
+            buildConfigField("String", "AGENT_BASE_URL", "\"$configuredAgentBaseUrl\"")
+            manifestPlaceholders["usesCleartextTraffic"] = configuredAgentBaseUrl.startsWith("http://").toString()
         }
         release {
             isMinifyEnabled = false
-            val releaseAgentBaseUrl =
-                providers.gradleProperty("AGENT_BASE_URL")
-                    .orElse(providers.environmentVariable("AGENT_BASE_URL"))
-                    .orElse("https://replace-with-your-railway-domain.up.railway.app")
-                    .get()
-                    .trimEnd('/')
-            buildConfigField("String", "AGENT_BASE_URL", "\"$releaseAgentBaseUrl\"")
+            buildConfigField("String", "AGENT_BASE_URL", "\"$configuredAgentBaseUrl\"")
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
