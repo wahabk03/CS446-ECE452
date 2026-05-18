@@ -33,9 +33,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -321,16 +326,25 @@ fun HomeScreen(
     var showChangesCard by remember { mutableStateOf(false) }
     var isUpdatingCourses by remember { mutableStateOf(false) }
 
+    var showNotifRationaleDialog by remember { mutableStateOf(false) }
+    var showNotifSettingsBanner by remember { mutableStateOf(false) }
+
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { /* granted or not, in-app alerts work regardless */ }
-    var hasAskedNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    ) { granted -> if (!granted) showNotifSettingsBanner = true }
 
-    LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= 33 && !hasAskedNotificationPermission) {
-            hasAskedNotificationPermission = true
-            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
+    // Only prompt once the user has a course scheduled — so the ask has clear
+    // context ("we'll notify you if your courses change").  Persisted so we
+    // never ask more than once across app restarts.
+    LaunchedEffect(scheduledCourses.isNotEmpty()) {
+        if (scheduledCourses.isEmpty()) return@LaunchedEffect
+        if (android.os.Build.VERSION.SDK_INT < 33) return@LaunchedEffect
+        val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("notif_perm_asked", false)) return@LaunchedEffect
+        val alreadyGranted = ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!alreadyGranted) showNotifRationaleDialog = true
     }
 
     // Timetable dropdown state
@@ -414,6 +428,44 @@ fun HomeScreen(
             AppState.timetables[idx] = AppState.timetables[idx].copy(courses = scheduledCourses.toList())
         }
         CourseRepository.saveAllTimetables(AppState.timetables.toList(), id)
+    }
+
+    // Notification rationale dialog — shown the first time the user has a course
+    if (showNotifRationaleDialog) {
+        val saveAsked = {
+            context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("notif_perm_asked", true).apply()
+        }
+        AlertDialog(
+            onDismissRequest = { showNotifRationaleDialog = false; saveAsked() },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp),
+            title = { Text("Stay updated on course changes", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Get notified if your course times, locations, or sections change. " +
+                    "You can disable this anytime in Settings.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF555555)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNotifRationaleDialog = false
+                        saveAsked()
+                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryYellow, contentColor = Color.Black),
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("Allow", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotifRationaleDialog = false; saveAsked() }) {
+                    Text("Not now", color = Color.Gray)
+                }
+            }
+        )
     }
 
     // Export dialog (stable API — no experimental ModalBottomSheet)
@@ -774,6 +826,44 @@ fun HomeScreen(
 
                 TextButton(onClick = onLogout) {
                     Text("Logout", color = Color.Gray, fontSize = 15.sp)
+                }
+            }
+
+            // Notification settings banner — shown after permission is denied
+            if (showNotifSettingsBanner) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFFFF8E1))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Enable notifications to get course change alerts.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF7B6000),
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("Settings", fontWeight = FontWeight.Bold, color = Color(0xFF7B6000), fontSize = 12.sp)
+                    }
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Dismiss",
+                        tint = Color(0xFF7B6000),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { showNotifSettingsBanner = false }
+                    )
                 }
             }
 

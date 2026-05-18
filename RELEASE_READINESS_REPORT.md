@@ -87,10 +87,11 @@ The app now builds with `./gradlew assembleDebug`, `./gradlew lintDebug` passes,
 
 ### Medium
 
-- [ ] **Notification permission and channel UX need polish**
+- [x] **Notification permission and channel UX need polish**
   - **Files:** `HomeScreen.kt`, `NotificationHelper.kt`
   - **Problem:** Permission is requested on home load without much context, and denied permission is silently ignored.
   - **Fix proposal:** Ask after the user adds courses or in profile notification settings, explain why notifications help, and show a settings route if denied.
+  - **Fix note:** Permission is now deferred until the user has at least one course scheduled. A rationale dialog ("Stay updated on course changes") appears with Allow / Not now. The choice is persisted in `SharedPreferences` (`notif_perm_asked`) so the prompt never repeats. If denied, a dismissible amber banner appears on the home screen offering a direct link to the app's notification Settings page.
 
 - [ ] **No Terms/Privacy/AI disclaimer flow**
   - **Files:** UI screens, README/deployment docs
