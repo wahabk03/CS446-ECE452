@@ -339,6 +339,7 @@ fun HomeScreen(
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    val isAgentRunning = ChatStateManager.isWaitingForAgent
     var newTimetableName by remember { mutableStateOf("") }
     var newTimetableTerm by remember { mutableStateOf("1261") }
     var hasLoadedTimetables by remember { mutableStateOf(false) }
@@ -975,12 +976,14 @@ fun HomeScreen(
                         modifier = Modifier.background(Color.White)
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Clear", color = Color.Gray) },
-                            onClick = { showMoreMenu = false; showClearConfirmDialog = true }
+                            text = { Text("Clear", color = if (isAgentRunning) Color.LightGray else Color.Gray) },
+                            onClick = { showMoreMenu = false; showClearConfirmDialog = true },
+                            enabled = !isAgentRunning
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete", color = Color(0xFFE53935)) },
-                            onClick = { showMoreMenu = false; showDeleteConfirmDialog = true }
+                            text = { Text("Delete", color = if (isAgentRunning) Color.LightGray else Color(0xFFE53935)) },
+                            onClick = { showMoreMenu = false; showDeleteConfirmDialog = true },
+                            enabled = !isAgentRunning
                         )
                         HorizontalDivider(color = Color(0xFFEEEEEE))
                         DropdownMenuItem(

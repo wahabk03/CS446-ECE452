@@ -498,6 +498,7 @@ fun ExpandableCourseGroup(
                         contentAlignment = Alignment.Center
                     ) {
                         if (hasPendingChanges) {
+                            val isAgentRunning = ChatStateManager.isWaitingForAgent
                             Button(
                                 onClick = {
                                     val missing = requiredTypes.filter { !pendingByType.containsKey(it) }
@@ -509,14 +510,21 @@ fun ExpandableCourseGroup(
                                         onConfirmSections(pendingByType.values.toList())
                                     }
                                 },
+                                enabled = !isAgentRunning,
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = primaryYellow,
-                                    contentColor = Color.Black
+                                    contentColor = Color.Black,
+                                    disabledContainerColor = Color(0xFFDDDDDD),
+                                    disabledContentColor = Color(0xFF888888)
                                 ),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text("Confirm", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Text(
+                                    if (isAgentRunning) "Busy…" else "Confirm",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }

@@ -5,6 +5,7 @@ import logging
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.cloud.firestore import transactional as _transactional
 from llm_config import SERPAPI_API_KEY
 
 _HTTP_SESSION = requests.Session()
@@ -26,6 +27,20 @@ def _cap_timetables(timetables: list) -> list:
             copied["courses"] = (copied.get("courses") or [])[:MAX_COURSES_PER_TIMETABLE]
             capped.append(copied)
     return capped
+
+
+def _resolve_active_timetable_index(timetables: list, active_id: str):
+    for i, timetable in enumerate(timetables):
+        if timetable.get("id") == active_id:
+            return i
+    if timetables:
+        return len(timetables) - 1
+    return -1
+
+
+class _UserFacingError(Exception):
+    """Non-retried error for user-visible rejection (quota exceeded, conflict, etc.)."""
+    pass
 
 # Initialize firebase admin if not already initialized
 if not firebase_admin._apps:
@@ -297,38 +312,31 @@ def create_timetable(uid: str, title: str, term: str) -> dict:
     logger.info("Creating timetable uid=%s term=%s", _safe_uid(uid), term)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
-        
+
     try:
         db = firestore.client()
         user_ref = db.collection("users").document(uid)
-        doc = user_ref.get()
-        data = doc.to_dict() or {} if doc.exists else {}
-        
-        timetables = _cap_timetables(data.get("timetables", []))
-        if len(timetables) >= MAX_TIMETABLES_PER_USER:
-            return {"error": f"Timetable limit reached. You can keep up to {MAX_TIMETABLES_PER_USER} timetables."}
         new_id = str(uuid.uuid4())
-        
-        new_tt = {
-            "id": new_id,
-            "name": title,
-            "term": term,
-            "courses": []
-        }
-        timetables.append(new_tt)
-        
-        user_ref.set({"timetables": timetables, "activeTimetableId": new_id}, merge=True)
 
-        # Read back immediately to ensure the write persisted before reporting success.
-        verify_doc = user_ref.get()
-        verify_data = verify_doc.to_dict() or {} if verify_doc.exists else {}
-        verify_timetables = verify_data.get("timetables", [])
-        if any(t.get("id") == new_id for t in verify_timetables):
-            return {
-                "message": f"Successfully created new timetable '{title}' for term {term}.",
-                "timetable_id": new_id
-            }
-        return {"error": "Timetable creation could not be confirmed after write."}
+        @_transactional
+        def _txn(transaction):
+            snap = user_ref.get(transaction=transaction)
+            data = snap.to_dict() or {} if snap.exists else {}
+            timetables = _cap_timetables(data.get("timetables", []))
+            if len(timetables) >= MAX_TIMETABLES_PER_USER:
+                raise _UserFacingError(
+                    f"Timetable limit reached. You can keep up to {MAX_TIMETABLES_PER_USER} timetables."
+                )
+            timetables.append({"id": new_id, "name": title, "term": term, "courses": []})
+            transaction.set(user_ref, {"timetables": timetables, "activeTimetableId": new_id}, merge=True)
+
+        _txn(db.transaction())
+        return {
+            "message": f"Successfully created new timetable '{title}' for term {term}.",
+            "timetable_id": new_id,
+        }
+    except _UserFacingError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -404,7 +412,7 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
     logger.info("Adding course to timetable uid=%s term=%s course=%s sections=%s", _safe_uid(uid), term, course_code, len(sections or []))
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
-    
+
     try:
         db = firestore.client()
         parts = course_code.split(" ")
@@ -418,70 +426,69 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
         course_doc = db.collection("courses").document(doc_id).get()
         if not course_doc.exists:
             return {"error": f"Course {course_code} not found in database for term {term}. Does this course exist?"}
-            
+
         course_data = course_doc.to_dict()
         available_sections = course_data.get("sections", [])
-        
-        # map for matching
         section_map = {s["component"]: s for s in available_sections}
-        
-        user_ref = db.collection("users").document(uid)
-        doc = user_ref.get()
-        data = doc.to_dict() or {} if doc.exists else {}
-        
-        timetables = _cap_timetables(data.get("timetables", []))
-        active_id = data.get("activeTimetableId")
-        target_idx = -1
-        
-        for i, t in enumerate(timetables):
-            if t.get("id") == active_id:
-                target_idx = i
-                break
-                
-        if target_idx == -1 and len(timetables) > 0:
-            target_idx = len(timetables) - 1
-            
-        if target_idx == -1:
-            import uuid
-            new_id = str(uuid.uuid4())
-            new_tt = {"id": new_id, "name": "My Timetable", "term": term, "courses": []}
-            timetables.append(new_tt)
-            target_idx = 0
-            user_ref.set({"activeTimetableId": new_id}, merge=True)
-            
-        scheduled_courses = timetables[target_idx].get("courses", [])
-        if len(scheduled_courses) + len(sections) > MAX_COURSES_PER_TIMETABLE:
-            return {"error": f"Course limit reached. A timetable can contain up to {MAX_COURSES_PER_TIMETABLE} sections."}
-        
-        added_count = 0
-        added_components = []
-        for sec_req in sections:
-            if sec_req in section_map:
-                sec_data = section_map[sec_req]
-                t_info = parse_time_date(sec_data.get("time_date", ""))
-                
-                new_course = {
-                    "code": str(course_code),
-                    "title": str(course_data.get("title", "")),
-                    "term": str(term),
-                    "units": str(course_data.get("units", "0.5")),
-                    "classNumber": str(sec_data.get("class", "")),
-                    "component": str(sec_data.get("component", "")),
-                    "days": t_info["days"],
-                    "startHour": int(t_info["startHour"]),
-                    "startMinute": int(t_info["startMinute"]),
-                    "endHour": int(t_info["endHour"]),
-                    "endMinute": int(t_info["endMinute"]),
-                    "location": str(sec_data.get("location", ""))
-                }
-                
-                prefix = sec_req.split(" ")[0] if " " in sec_req else sec_req
-                filtered_courses = [
-                    c for c in scheduled_courses 
-                    if not (c.get("code") == course_code and c.get("term") == term and c.get("component", "").startswith(prefix))
-                ]
 
-                for existing in filtered_courses:
+        # Validate all requested sections before entering the transaction.
+        for sec_req in sections:
+            if sec_req not in section_map:
+                return {"error": f"Section component '{sec_req}' not found for course {course_code}. Available components: {list(section_map.keys())}"}
+
+        # Pre-build course entries from global course data (no user state needed yet).
+        new_course_entries = {}
+        for sec_req in sections:
+            sec_data = section_map[sec_req]
+            t_info = parse_time_date(sec_data.get("time_date", ""))
+            new_course_entries[sec_req] = {
+                "code": str(course_code),
+                "title": str(course_data.get("title", "")),
+                "term": str(term),
+                "units": str(course_data.get("units", "0.5")),
+                "classNumber": str(sec_data.get("class", "")),
+                "component": str(sec_data.get("component", "")),
+                "days": t_info["days"],
+                "startHour": int(t_info["startHour"]),
+                "startMinute": int(t_info["startMinute"]),
+                "endHour": int(t_info["endHour"]),
+                "endMinute": int(t_info["endMinute"]),
+                "location": str(sec_data.get("location", "")),
+            }
+
+        user_ref = db.collection("users").document(uid)
+
+        @_transactional
+        def _txn(transaction):
+            import uuid as _uuid
+            doc = user_ref.get(transaction=transaction)
+            data = doc.to_dict() or {} if doc.exists else {}
+            timetables = _cap_timetables(data.get("timetables", []))
+            active_id = data.get("activeTimetableId")
+
+            target_idx = _resolve_active_timetable_index(timetables, active_id)
+            new_active_id = None
+            if target_idx == -1:
+                new_active_id = str(_uuid.uuid4())
+                timetables.append({"id": new_active_id, "name": "My Timetable", "term": term, "courses": []})
+                target_idx = 0
+
+            scheduled_courses = list(timetables[target_idx].get("courses", []))
+            if len(scheduled_courses) + len(sections) > MAX_COURSES_PER_TIMETABLE:
+                raise _UserFacingError(
+                    f"Course limit reached. A timetable can contain up to {MAX_COURSES_PER_TIMETABLE} sections."
+                )
+
+            added_components = []
+            for sec_req in sections:
+                new_course = new_course_entries[sec_req]
+                prefix = sec_req.split(" ")[0] if " " in sec_req else sec_req
+                filtered = [
+                    c for c in scheduled_courses
+                    if not (c.get("code") == course_code and c.get("term") == term
+                            and c.get("component", "").startswith(prefix))
+                ]
+                for existing in filtered:
                     if str(existing.get("term", "")) != str(term):
                         continue
                     if has_time_conflict(existing, new_course):
@@ -489,24 +496,26 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
                             f"{existing.get('startHour', 0):02d}:{existing.get('startMinute', 0):02d}-"
                             f"{existing.get('endHour', 0):02d}:{existing.get('endMinute', 0):02d}"
                         )
-                        return {
-                            "error": (
-                                f"Time conflict detected when adding {course_code} {sec_req}. "
-                                f"Conflicts with {existing.get('code', 'Unknown')} {existing.get('component', '')} "
-                                f"on {existing.get('days', [])} at {conflict_time}."
-                            )
-                        }
-
-                filtered_courses.append(new_course)
-                scheduled_courses = filtered_courses
-                added_count += 1
+                        raise _UserFacingError(
+                            f"Time conflict detected when adding {course_code} {sec_req}. "
+                            f"Conflicts with {existing.get('code', 'Unknown')} {existing.get('component', '')} "
+                            f"on {existing.get('days', [])} at {conflict_time}."
+                        )
+                filtered.append(new_course)
+                scheduled_courses = filtered
                 added_components.append(sec_req)
-            else:
-                return {"error": f"Section component '{sec_req}' not found for course {course_code}. Available components: {list(section_map.keys())}"}
-                
-        timetables[target_idx]["courses"] = scheduled_courses
-        user_ref.set({"timetables": timetables}, merge=True)
-        return {"message": f"Successfully added/updated sections: {', '.join(added_components)} for {course_code} in term {term}."}
+
+            timetables[target_idx]["courses"] = scheduled_courses
+            update = {"timetables": timetables}
+            if new_active_id:
+                update["activeTimetableId"] = new_active_id
+            transaction.set(user_ref, update, merge=True)
+            return added_components
+
+        added = _txn(db.transaction())
+        return {"message": f"Successfully added/updated sections: {', '.join(added)} for {course_code} in term {term}."}
+    except _UserFacingError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -517,39 +526,39 @@ def delete_course_from_timetable(uid: str, term: str, course_code: str) -> dict:
     logger.info("Deleting course from timetable uid=%s term=%s course=%s", _safe_uid(uid), term, course_code)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
-    
+
     try:
         db = firestore.client()
         user_ref = db.collection("users").document(uid)
-        doc = user_ref.get()
-        
-        if not doc.exists:
+
+        @_transactional
+        def _txn(transaction):
+            doc = user_ref.get(transaction=transaction)
+            if not doc.exists:
+                return "not_found"
+            data = doc.to_dict() or {}
+            timetables = _cap_timetables(data.get("timetables", []))
+            target_idx = _resolve_active_timetable_index(timetables, data.get("activeTimetableId"))
+            if target_idx == -1:
+                return "no_timetable"
+            scheduled_courses = timetables[target_idx].get("courses", [])
+            filtered = [
+                c for c in scheduled_courses
+                if not (str(c.get("term")) == str(term) and c.get("code") == course_code)
+            ]
+            if len(filtered) == len(scheduled_courses):
+                return "not_present"
+            timetables[target_idx]["courses"] = filtered
+            transaction.set(user_ref, {"timetables": timetables}, merge=True)
+            return "ok"
+
+        status = _txn(db.transaction())
+        if status == "not_found":
             return {"message": "User document not found."}
-            
-        data = doc.to_dict() or {}
-        timetables = _cap_timetables(data.get("timetables", []))
-        active_id = data.get("activeTimetableId")
-        target_idx = -1
-        for i, t in enumerate(timetables):
-            if t.get("id") == active_id:
-                target_idx = i
-                break
-        if target_idx == -1 and len(timetables) > 0:
-            target_idx = len(timetables) - 1
-            
-        if target_idx == -1:
+        if status == "no_timetable":
             return {"message": "You don't have any existing timetables."}
-            
-        scheduled_courses = timetables[target_idx].get("courses", [])
-        
-        original_length = len(scheduled_courses)
-        scheduled_courses = [c for c in scheduled_courses if not (str(c.get("term")) == str(term) and c.get("code") == course_code)]
-        
-        if len(scheduled_courses) == original_length:
+        if status == "not_present":
             return {"message": f"Course {course_code} for term {term} is not present in the timetable."}
-            
-        timetables[target_idx]["courses"] = scheduled_courses
-        user_ref.set({"timetables": timetables}, merge=True)
         return {"message": f"Successfully deleted {course_code} from timetable for term {term}."}
     except Exception as e:
         return {"error": str(e)}
@@ -561,35 +570,33 @@ def clear_timetable(uid: str, term: str) -> dict:
     logger.info("Clearing timetable uid=%s term=%s", _safe_uid(uid), term)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
-    
+
     try:
         db = firestore.client()
         user_ref = db.collection("users").document(uid)
-        doc = user_ref.get()
-        
-        if not doc.exists:
+
+        @_transactional
+        def _txn(transaction):
+            doc = user_ref.get(transaction=transaction)
+            if not doc.exists:
+                return "not_found"
+            data = doc.to_dict() or {}
+            timetables = _cap_timetables(data.get("timetables", []))
+            target_idx = _resolve_active_timetable_index(timetables, data.get("activeTimetableId"))
+            if target_idx == -1:
+                return "no_timetable"
+            timetables[target_idx]["courses"] = [
+                c for c in timetables[target_idx].get("courses", [])
+                if str(c.get("term")) != str(term)
+            ]
+            transaction.set(user_ref, {"timetables": timetables}, merge=True)
+            return "ok"
+
+        status = _txn(db.transaction())
+        if status == "not_found":
             return {"message": "User document not found."}
-            
-        data = doc.to_dict() or {}
-        timetables = _cap_timetables(data.get("timetables", []))
-        active_id = data.get("activeTimetableId")
-        target_idx = -1
-        for i, t in enumerate(timetables):
-            if t.get("id") == active_id:
-                target_idx = i
-                break
-        if target_idx == -1 and len(timetables) > 0:
-            target_idx = len(timetables) - 1
-            
-        if target_idx == -1:
+        if status == "no_timetable":
             return {"message": "You don't have any existing timetables."}
-            
-        scheduled_courses = timetables[target_idx].get("courses", [])
-        
-        scheduled_courses = [c for c in scheduled_courses if str(c.get("term")) != str(term)]
-        
-        timetables[target_idx]["courses"] = scheduled_courses
-        user_ref.set({"timetables": timetables}, merge=True)
         return {"message": f"Successfully cleared timetable for term {term}."}
     except Exception as e:
         return {"error": str(e)}

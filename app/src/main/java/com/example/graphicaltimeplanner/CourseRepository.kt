@@ -428,27 +428,59 @@ object CourseRepository {
     }
 
     suspend fun saveUserSchedule(courses: List<Course>) {
-        val (timetables, activeId) = loadAllTimetables()
-        val resolvedActiveId = activeId ?: timetables.firstOrNull()?.id
-
-        val updated = if (resolvedActiveId == null) {
-            listOf(Timetable(
-                id = java.util.UUID.randomUUID().toString(),
-                name = "My Timetable",
-                term = "1261",
-                courses = courses
-            ))
-        } else {
-            val mutable = timetables.toMutableList()
-            val idx = mutable.indexOfFirst { it.id == resolvedActiveId }
-            if (idx >= 0) {
-                mutable[idx] = mutable[idx].copy(courses = courses)
-            }
-            mutable
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        try {
+            val docRef = db.collection("users").document(userId)
+            db.runTransaction { transaction ->
+                val doc = transaction.get(docRef)
+                val rawList = doc.get("timetables") as? List<Map<String, Any>> ?: emptyList()
+                val timetables = rawList.take(MAX_TIMETABLES_PER_USER).map { ttMap ->
+                    val id = ttMap["id"] as? String ?: java.util.UUID.randomUUID().toString()
+                    val name = ttMap["name"] as? String ?: "Timetable"
+                    val term = normalizeTermCode(ttMap["term"] as? String)
+                    val rawCourses = (ttMap["courses"] as? List<Map<String, Any>>)
+                        ?.take(MAX_COURSES_PER_TIMETABLE) ?: emptyList()
+                    Timetable(id = id, name = name, term = term, courses = rawCourses.map { mapToCourse(it) })
+                }
+                val activeId = doc.getString("activeTimetableId")?.takeIf { it.isNotBlank() }
+                val resolvedActiveId = activeId ?: timetables.firstOrNull()?.id
+                val updated = if (resolvedActiveId == null) {
+                    listOf(Timetable(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = "My Timetable",
+                        term = "1261",
+                        courses = courses
+                    ))
+                } else {
+                    val mutable = timetables.toMutableList()
+                    val idx = mutable.indexOfFirst { it.id == resolvedActiveId }
+                    if (idx >= 0) mutable[idx] = mutable[idx].copy(courses = courses)
+                    mutable
+                }
+                val newActiveId = resolvedActiveId ?: updated.first().id
+                val cappedTimetables = updated
+                    .take(MAX_TIMETABLES_PER_USER)
+                    .map { tt -> tt.copy(courses = tt.courses.take(MAX_COURSES_PER_TIMETABLE)) }
+                val resolvedFinalActiveId = cappedTimetables
+                    .firstOrNull { it.id == newActiveId }?.id
+                    ?: cappedTimetables.firstOrNull()?.id
+                    ?: ""
+                val data: Map<String, Any> = mapOf(
+                    "timetables" to cappedTimetables.map { tt ->
+                        mapOf(
+                            "id" to tt.id,
+                            "name" to tt.name,
+                            "term" to tt.term,
+                            "courses" to tt.courses.map { courseToMap(it) }
+                        )
+                    },
+                    "activeTimetableId" to resolvedFinalActiveId
+                )
+                transaction.set(docRef, data, com.google.firebase.firestore.SetOptions.merge())
+            }.await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving user schedule", e)
         }
-
-        val newActiveId = resolvedActiveId ?: updated.first().id
-        saveAllTimetables(updated, newActiveId)
     }
 
     suspend fun loadUserSchedule(): List<Course> {

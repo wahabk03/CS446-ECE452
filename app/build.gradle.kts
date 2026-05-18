@@ -29,13 +29,30 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("KEYSTORE_PATH") ?: "release.keystore"
+            val ksFile = file(ksPath)
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = System.getenv("KEYSTORE_STORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEYSTORE_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("KEYSTORE_KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "AGENT_BASE_URL", "\"$configuredAgentBaseUrl\"")
             manifestPlaceholders["usesCleartextTraffic"] = configuredAgentBaseUrl.startsWith("http://").toString()
         }
         release {
-            isMinifyEnabled = false
+            val releaseSigningConfig = signingConfigs.getByName("release")
+            if (releaseSigningConfig.storeFile?.exists() == true) {
+                signingConfig = releaseSigningConfig
+            }
+            isMinifyEnabled = true
             buildConfigField("String", "AGENT_BASE_URL", "\"$configuredAgentBaseUrl\"")
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             proguardFiles(

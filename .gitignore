@@ -17,6 +17,8 @@ local.properties
 .vscode
 google-services.json
 serviceAccountKey.json
+*.keystore
+*.jks
 *__pycache__/
 .env
 utils/

@@ -73,15 +73,17 @@ The app now builds with `./gradlew assembleDebug`, `./gradlew lintDebug` passes,
   - **Fix proposal:** Move timetables to `users/{uid}/timetables/{timetableId}` and messages to `users/{uid}/agent/history/sessions/{sessionId}/messages/{messageId}` or enforce hard caps.
   - **Fix note:** Added immediate hard caps: 12 timetables/user, 50 course sections/timetable, 30 chat sessions, 80 messages/session, 8k chars/message, plus assistant-state caps. Longer-term subcollection migration is still a better scaling architecture.
 
-- [ ] **Agent timetable writes are non-transactional**
+- [x] **Agent timetable writes are non-transactional**
   - **Files:** `agent/tools.py`, `CourseRepository.kt`
   - **Problem:** Client saves and backend agent mutations both read-modify-write timetable arrays. Concurrent changes can overwrite each other.
   - **Fix proposal:** Use Firestore transactions for timetable mutations, or move courses into subcollections where individual course updates are atomic.
+  - **Fix note:** All four Python mutation functions (`create_timetable`, `add_course_to_timetable`, `delete_course_from_timetable`, `clear_timetable`) now run their read-modify-write inside a `@_transactional`-decorated Firestore transaction (auto-retried on conflict). `saveUserSchedule` in `CourseRepository.kt` now uses `db.runTransaction { ... }.await()` instead of a separate `loadAllTimetables()` + `saveAllTimetables()` call.
 
-- [ ] **Release signing/minification not configured**
+- [x] **Release signing/minification not configured**
   - **File:** `app/build.gradle.kts`
   - **Problem:** Release has `isMinifyEnabled = false`, and no visible release signing setup. This is okay for class, not for store release.
   - **Fix proposal:** Configure release signing through local/CI secrets, enable R8/minify after testing, and add ProGuard/R8 keep rules if Firebase/serialization need them.
+  - **Fix note:** `isMinifyEnabled = true` is set for release. `signingConfigs` reads `KEYSTORE_PATH`, `KEYSTORE_STORE_PASSWORD`, `KEYSTORE_KEY_ALIAS`, `KEYSTORE_KEY_PASSWORD` from environment variables; signing is skipped gracefully if the keystore file is absent. ProGuard keep rules added in `proguard-rules.pro` for app classes, Firebase/GMS, and Kotlin metadata. `*.keystore` and `*.jks` added to `.gitignore`. **You still need to supply the keystore — see below.**
 
 ### Medium
 
@@ -213,6 +215,7 @@ Graphical Time Planner should be positioned as a Waterloo-focused schedule plann
 - `PYTHONPYCACHEPREFIX=/private/tmp/cs446_pycache python3 -m py_compile agent/server_agent.py agent/tools.py agent/agent.py agent/llm_config.py`: Passed.
 - `./gradlew assembleDebug`: Passed.
 - `./gradlew lintDebug`: Passed.
+- Transactional timetable writes + `saveUserSchedule` transaction: `py_compile` and `assembleDebug` re-verified, both passed.
 
 ## App Test Plan
 
