@@ -1,10 +1,12 @@
 import os
+import logging
 import requests
 from llm_config import LLM_CONFIG
 from llm_config import SERPAPI_API_KEY
 
 _HTTP_SESSION = requests.Session()
 _LLM_REQUEST_TIMEOUT_SECS = 45
+logger = logging.getLogger(__name__)
 
 class Agent:
     def __init__(self):
@@ -109,7 +111,5 @@ class Agent:
             data = response.json()
             return data["choices"][0]["message"]
         except Exception as e:
-            print(f"Error calling LLM API: {e}")
-            if 'response' in locals() and hasattr(response, 'text'):
-                print(f"Response details: {response.text}")
+            logger.warning("LLM API call failed: %s", e)
             return {"role": "assistant", "content": "Sorry, I encountered an error connecting to the agent's brain."}

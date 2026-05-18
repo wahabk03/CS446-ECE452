@@ -6,6 +6,14 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 private const val TAG = "CourseRepo"
+private const val MAX_TIMETABLES_PER_USER = 12
+private const val MAX_COURSES_PER_TIMETABLE = 50
+private const val MAX_ASSISTANT_COURSES_PER_BUCKET = 80
+private const val MAX_GENERATED_SCHEDULES_TO_SAVE = 25
+
+private fun debugLog(message: String) {
+    if (BuildConfig.DEBUG) Log.d(TAG, message)
+}
 
 // Singleton Repository
 object CourseRepository {
@@ -67,7 +75,7 @@ object CourseRepository {
      */
     suspend fun getCourses(term: String, subject: String): List<Course> {
         val courses = mutableListOf<Course>()
-        Log.d(TAG, "Fetching courses: term=$term, subject=$subject")
+        debugLog("Fetching courses: term=$term, subject=$subject")
 
         // Single-field whereEqualTo uses an auto-created index — no composite
         // index needed.  Filter by term on the client side.
@@ -76,7 +84,7 @@ object CourseRepository {
             .get()
             .await()
 
-        Log.d(TAG, "Query returned ${querySnapshot.documents.size} docs for subject=$subject")
+        debugLog("Query returned ${querySnapshot.documents.size} docs for subject=$subject")
 
         for (document in querySnapshot.documents) {
             try {
@@ -90,7 +98,7 @@ object CourseRepository {
 
                 // 'sections' is an array of maps
                 val rawSections = document.get("sections") as? List<Map<String, Any>> ?: emptyList()
-                Log.d(TAG, "  Doc ${document.id}: ${rawSections.size} sections")
+                debugLog("Doc ${document.id}: ${rawSections.size} sections")
 
                 for (secMap in rawSections) {
                     val timeDateStr = secMap["time_date"] as? String ?: ""
@@ -151,7 +159,7 @@ object CourseRepository {
             }
         }
 
-        Log.d(TAG, "Returning ${courses.size} course sections for $subject $term")
+        debugLog("Returning ${courses.size} course sections for $subject $term")
 
         return courses
     }
@@ -276,9 +284,9 @@ object CourseRepository {
     suspend fun getMajors(): List<Major> {
         return try {
             val snapshot = db.collection("major_graduation_requirement").get().await()
-            Log.d(TAG, "getMajors: fetched ${snapshot.documents.size} documents from 'majors'")
+            debugLog("getMajors: fetched ${snapshot.documents.size} documents")
             if (snapshot.documents.isNotEmpty()) {
-                Log.d(TAG, "getMajors: first doc id=${snapshot.documents[0].id}, data=${snapshot.documents[0].data}")
+                debugLog("getMajors: first doc id=${snapshot.documents[0].id}")
             }
             snapshot.documents.mapNotNull { doc ->
                 val name = doc.getString("major") ?: run {
@@ -371,8 +379,15 @@ object CourseRepository {
     suspend fun saveAllTimetables(timetables: List<Timetable>, activeTimetableId: String?) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         try {
+            val cappedTimetables = timetables
+                .take(MAX_TIMETABLES_PER_USER)
+                .map { tt -> tt.copy(courses = tt.courses.take(MAX_COURSES_PER_TIMETABLE)) }
+            val resolvedActiveId = activeTimetableId
+                ?.takeIf { requestedId -> cappedTimetables.any { it.id == requestedId } }
+                ?: cappedTimetables.firstOrNull()?.id
+
             val data = mapOf(
-                "timetables" to timetables.map { tt ->
+                "timetables" to cappedTimetables.map { tt ->
                     mapOf(
                         "id" to tt.id,
                         "name" to tt.name,
@@ -380,7 +395,7 @@ object CourseRepository {
                         "courses" to tt.courses.map { courseToMap(it) }
                     )
                 },
-                "activeTimetableId" to (activeTimetableId ?: "")
+                "activeTimetableId" to (resolvedActiveId ?: "")
             )
             db.collection("users").document(userId)
                 .set(data, com.google.firebase.firestore.SetOptions.merge())
@@ -395,11 +410,13 @@ object CourseRepository {
         return try {
             val doc = db.collection("users").document(userId).get().await()
             val rawList = doc.get("timetables") as? List<Map<String, Any>> ?: emptyList()
-            val timetables = rawList.map { ttMap ->
+            val timetables = rawList.take(MAX_TIMETABLES_PER_USER).map { ttMap ->
                 val id = ttMap["id"] as? String ?: java.util.UUID.randomUUID().toString()
                 val name = ttMap["name"] as? String ?: "Timetable"
                 val term = normalizeTermCode(ttMap["term"] as? String)
-                val rawCourses = ttMap["courses"] as? List<Map<String, Any>> ?: emptyList()
+                val rawCourses = (ttMap["courses"] as? List<Map<String, Any>>)
+                    ?.take(MAX_COURSES_PER_TIMETABLE)
+                    ?: emptyList()
                 Timetable(id = id, name = name, term = term, courses = rawCourses.map { mapToCourse(it) })
             }
             val activeId = doc.getString("activeTimetableId")?.takeIf { it.isNotBlank() }
@@ -442,15 +459,17 @@ object CourseRepository {
 
     suspend fun saveGenerateState(term: String, wishlist: Map<String, List<Course>>, generatedSchedules: List<List<Course>>) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        Log.d(TAG, "Saving assistant state for user $userId term $term. Wishlist size: ${wishlist.size}, Schedules: ${generatedSchedules.size}")
+        debugLog("Saving assistant state term=$term wishlist=${wishlist.size} schedules=${generatedSchedules.size}")
 
         try {
-            val wishlistData = wishlist.mapValues { (_, courses) -> courses.map { courseToMap(it) } }
+            val wishlistData = wishlist.mapValues { (_, courses) ->
+                courses.take(MAX_ASSISTANT_COURSES_PER_BUCKET).map { courseToMap(it) }
+            }
 
             // Firestore DOES NOT support nested arrays (List of Lists).
             // We must wrap the inner list in a Map to store it successfully.
-            val schedulesData = generatedSchedules.map { schedule ->
-                mapOf("courses" to schedule.map { courseToMap(it) })
+            val schedulesData = generatedSchedules.take(MAX_GENERATED_SCHEDULES_TO_SAVE).map { schedule ->
+                mapOf("courses" to schedule.take(MAX_COURSES_PER_TIMETABLE).map { courseToMap(it) })
             }
 
             val data = mapOf(
@@ -458,7 +477,7 @@ object CourseRepository {
                 "generatedSchedules" to schedulesData
             )
             db.collection("users").document(userId).collection("assistant").document(term).set(data).await()
-            Log.d(TAG, "Successfully saved assistant state")
+            debugLog("Successfully saved assistant state")
         } catch (e: Exception) {
             Log.e(TAG, "Error saving assistant state", e)
         }

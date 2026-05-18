@@ -2,7 +2,9 @@ package com.example.graphicaltimeplanner
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Base64
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,6 +18,7 @@ import java.net.SocketTimeoutException
 import java.net.URL
 
 object AgentApi {
+    private const val TAG = "AgentApi"
     private val agentBaseUrl = BuildConfig.AGENT_BASE_URL.trimEnd('/')
     private val chatStreamUrl = "$agentBaseUrl/chat_stream"
     private val summarizeUrl = "$agentBaseUrl/summarize"
@@ -23,6 +26,14 @@ object AgentApi {
     private const val READ_TIMEOUT_MS = 120000
     private const val CONNECT_TIMEOUT_MS = 30000
     private const val MAX_RETRIES = 2
+    private const val MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+    private val allowedUploadMimeTypes = setOf(
+        "application/pdf",
+        "text/plain",
+        "text/markdown",
+        "text/csv"
+    )
+    private val allowedUploadExtensions = setOf(".pdf", ".txt", ".md", ".csv")
 
     data class AgentResponse(val response: String, val showButton: Boolean)
     data class GeneratedEmailResponse(val subject: String, val body: String)
@@ -51,6 +62,55 @@ object AgentApi {
             writer.write(jsonBody.toString())
             writer.flush()
         }
+    }
+
+    private fun readUploadAsBase64(context: Context, fileUri: Uri, fileName: String): String {
+        val mimeType = context.contentResolver.getType(fileUri)
+        val extension = fileName.substringAfterLast('.', missingDelimiterValue = "")
+            .lowercase()
+            .takeIf { it.isNotBlank() }
+            ?.let { ".$it" }
+
+        val isAllowed = mimeType in allowedUploadMimeTypes || extension in allowedUploadExtensions
+        if (!isAllowed) {
+            throw IOException("Unsupported file type. Please upload a PDF, TXT, MD, or CSV file.")
+        }
+
+        queryFileSize(context, fileUri)?.let { size ->
+            if (size > MAX_UPLOAD_BYTES) {
+                throw IOException("File is too large. Maximum upload size is 5 MB.")
+            }
+        }
+
+        var totalBytes = 0
+        val bytes = context.contentResolver.openInputStream(fileUri)?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read == -1) break
+                totalBytes += read
+                if (totalBytes > MAX_UPLOAD_BYTES) {
+                    throw IOException("File is too large. Maximum upload size is 5 MB.")
+                }
+                output.write(buffer, 0, read)
+            }
+            output.toByteArray()
+        } ?: throw IOException("Could not read the selected file.")
+
+        return Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
+
+    private fun queryFileSize(context: Context, fileUri: Uri): Long? {
+        context.contentResolver.query(fileUri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index != -1 && !cursor.isNull(index)) {
+                    return cursor.getLong(index)
+                }
+            }
+        }
+        return null
     }
 
     private suspend fun <T> withRetry(block: () -> T): T {
@@ -105,13 +165,7 @@ object AgentApi {
 
                 if (fileUri != null && fileName != null) {
                     put("file_name", fileName)
-                    val inputStream = context.contentResolver.openInputStream(fileUri)
-                    val bytes = inputStream?.readBytes()
-                    inputStream?.close()
-                    if (bytes != null) {
-                        val base64Str = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        put("file_bytes", base64Str)
-                    }
+                    put("file_bytes", readUploadAsBase64(context, fileUri, fileName))
                 }
             }
 
@@ -165,7 +219,7 @@ object AgentApi {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error sending agent message", e)
             return@withContext AgentResponse("Error: ${e.message}", false)
         }
     }
@@ -194,7 +248,7 @@ object AgentApi {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error summarizing chat", e)
         }
         return@withContext "Chat Session"
     }
@@ -248,7 +302,7 @@ object AgentApi {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error generating advisor email", e)
             return@withContext GeneratedEmailResponse(
                 subject = "Request for Academic Advising Assistance",
                 body = "Error generating email: ${e.message}"

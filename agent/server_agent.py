@@ -2,10 +2,12 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 import os
 import json
 import base64
+import binascii
 import tempfile
 import uuid
 import re
 import time
+import logging
 from collections import defaultdict, deque
 from agent import Agent
 from tools import read_uploaded_file, browse_online, browse_uwflow, query_database_readonly, create_timetable, add_course_to_timetable, delete_course_from_timetable, clear_timetable, show_timetable_button, TOOLS_SCHEMA
@@ -13,6 +15,8 @@ from firebase_admin import auth, firestore
 from typing import Optional, Tuple
 
 app = Flask(__name__)
+logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 MUTATION_TOOLS = {"create_timetable", "add_course_to_timetable", "delete_course_from_timetable", "clear_timetable"}
 _SYSTEM_PROMPT_CACHE = None
@@ -32,6 +36,9 @@ RATE_LIMIT_WINDOW_SECS = _env_int("AGENT_RATE_LIMIT_WINDOW_SECS", 60)
 RATE_LIMIT_MAX_REQUESTS = _env_int("AGENT_RATE_LIMIT_MAX_REQUESTS", 20)
 DAILY_QUOTA_MAX_COST = _env_int("AGENT_DAILY_QUOTA_MAX_COST", 200)
 MAX_TOOL_CALLS_PER_REQUEST = _env_int("AGENT_MAX_TOOL_CALLS_PER_REQUEST", 12)
+MAX_UPLOAD_BYTES = _env_int("AGENT_MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
+MAX_EXTRACTED_FILE_CHARS = _env_int("AGENT_MAX_EXTRACTED_FILE_CHARS", 80_000)
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md", ".csv"}
 
 # Cost units are deliberately abstract. Tune them in Railway without code changes
 # as provider pricing, model choice, and product limits evolve.
@@ -173,17 +180,36 @@ def _load_system_prompt() -> str:
 def _prepare_attached_content(file_name: str, file_bytes_base64: Optional[str]) -> Optional[str]:
     if not file_bytes_base64:
         return None
+
+    ext = os.path.splitext(file_name or "")[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        allowed = ", ".join(sorted(ALLOWED_UPLOAD_EXTENSIONS))
+        raise ValueError(f"Unsupported upload type. Allowed file types: {allowed}.")
+
     try:
-        file_data = base64.b64decode(file_bytes_base64)
-        ext = os.path.splitext(file_name)[1] if file_name else ".txt"
+        file_data = base64.b64decode(file_bytes_base64, validate=True)
+        if len(file_data) > MAX_UPLOAD_BYTES:
+            max_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
+            raise ValueError(f"Uploaded file is too large. Maximum size is {max_mb:.1f} MB.")
+
         temp_path = os.path.join(tempfile.gettempdir(), f"upload_{uuid.uuid4()}{ext}")
         with open(temp_path, "wb") as f:
             f.write(file_data)
-        attached_content = read_uploaded_file(temp_path)
-        os.remove(temp_path)
+        try:
+            attached_content = read_uploaded_file(temp_path)
+        finally:
+            os.remove(temp_path)
+
+        if len(attached_content) > MAX_EXTRACTED_FILE_CHARS:
+            attached_content = (
+                attached_content[:MAX_EXTRACTED_FILE_CHARS]
+                + "\n\n[File content truncated to fit the assistant context limit.]"
+            )
         return attached_content
+    except (binascii.Error, ValueError):
+        raise
     except Exception as e:
-        return f"Error reading attached file: {e}"
+        raise ValueError(f"Error reading attached file: {e}")
 
 
 def _parse_course_code(course_code: str) -> Optional[Tuple[str, str]]:
@@ -383,7 +409,12 @@ def _run_chat(uid: str, user_message: str, history: list, file_name: str, file_b
                 "ok": not _is_tool_error_response(tool_response)
             })
 
-            print(f"Tool '{func_name}' response: {tool_response}")
+            logger.info(
+                "Tool call complete name=%s ok=%s duration_ms=%s",
+                func_name,
+                not _is_tool_error_response(tool_response),
+                tool_elapsed_ms
+            )
 
             if isinstance(tool_response, dict):
                 tool_response = json.dumps(tool_response, ensure_ascii=False)
@@ -564,8 +595,11 @@ def chat():
     if not user_message:
         return jsonify({"error": "message is required"}), 400
 
-    result = _run_chat(uid, user_message, history, file_name, file_bytes_base64)
-    return jsonify(result)
+    try:
+        result = _run_chat(uid, user_message, history, file_name, file_bytes_base64)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route('/chat_stream', methods=['POST'])
@@ -669,7 +703,12 @@ def chat_stream():
                         "ok": not _is_tool_error_response(tool_response)
                     })
 
-                    print(f"Tool '{func_name}' response: {tool_response}")
+                    logger.info(
+                        "Tool call complete name=%s ok=%s duration_ms=%s",
+                        func_name,
+                        not _is_tool_error_response(tool_response),
+                        tool_elapsed_ms
+                    )
 
                     if isinstance(tool_response, dict):
                         tool_response = json.dumps(tool_response, ensure_ascii=False)

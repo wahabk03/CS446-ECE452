@@ -1,13 +1,31 @@
 import os
 import json
+import hashlib
+import logging
 import requests
-import base64
 import firebase_admin
 from firebase_admin import credentials, firestore
 from llm_config import SERPAPI_API_KEY
 
 _HTTP_SESSION = requests.Session()
 _SERPAPI_TIMEOUT_SECS = 20
+logger = logging.getLogger(__name__)
+MAX_TIMETABLES_PER_USER = int(os.getenv("AGENT_MAX_TIMETABLES_PER_USER", "12"))
+MAX_COURSES_PER_TIMETABLE = int(os.getenv("AGENT_MAX_COURSES_PER_TIMETABLE", "50"))
+
+
+def _safe_uid(uid: str) -> str:
+    return hashlib.sha256(str(uid).encode("utf-8")).hexdigest()[:10]
+
+
+def _cap_timetables(timetables: list) -> list:
+    capped = []
+    for timetable in (timetables or [])[:MAX_TIMETABLES_PER_USER]:
+        if isinstance(timetable, dict):
+            copied = dict(timetable)
+            copied["courses"] = (copied.get("courses") or [])[:MAX_COURSES_PER_TIMETABLE]
+            capped.append(copied)
+    return capped
 
 # Initialize firebase admin if not already initialized
 if not firebase_admin._apps:
@@ -27,7 +45,7 @@ def read_uploaded_file(file_path: str) -> str:
     Since we are using a text model for tool-calling, we extract the PDF text using pypdf.
     """
     file_path = os.path.expanduser(file_path)
-    print(f"Reading file from {file_path}")
+    logger.info("Reading uploaded file ext=%s", os.path.splitext(file_path)[1].lower())
     
     if not os.path.exists(file_path):
         return f"Error: File {file_path} not found."
@@ -61,7 +79,7 @@ def browse_online(query: str) -> str:
     """
     Browses the web for missing prerequisite or course info using SerpAPI.
     """
-    print(f"Browsing online for: {query}")
+    logger.info("Browsing online query_length=%s", len(query or ""))
     if not SERPAPI_API_KEY or SERPAPI_API_KEY == "your_serpapi_key_here":
         return "Error: SERPAPI_API_KEY is not configured."
         
@@ -88,7 +106,7 @@ def browse_uwflow(query: str) -> str:
     Searches UW Flow specifically for course/professor review information.
     Returns concise results with title, link, and snippet.
     """
-    print(f"Browsing UW Flow for: {query}")
+    logger.info("Browsing UW Flow query_length=%s", len(query or ""))
     if not SERPAPI_API_KEY or SERPAPI_API_KEY == "your_serpapi_key_here":
         return "Error: SERPAPI_API_KEY is not configured."
 
@@ -128,7 +146,7 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
         - query_type='major_graduation_requirement': Reads major-specific graduation requirement doc(s) from 'major_graduation_requirement'.
             If target_id is missing, attempts to use user's saved major/majorName.
     """
-    print(f"Querying database - User: {uid}, Type: {query_type}, Target: {target_id}")
+    logger.info("Querying database uid=%s type=%s target_present=%s", _safe_uid(uid), query_type, bool(target_id))
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
         
@@ -192,7 +210,7 @@ def query_database_readonly(uid: str, query_type: str, target_id: str = None) ->
             if doc.exists:
                 data = doc.to_dict() or {}
                 # Return the timetables specifically so the agent can see active timetables and their courses
-                timetables = data.get("timetables", [])
+                timetables = _cap_timetables(data.get("timetables", []))
                 active_id = data.get("activeTimetableId")
                 return {
                     "timetables": timetables,
@@ -276,7 +294,7 @@ def create_timetable(uid: str, title: str, term: str) -> dict:
     Creates a new timetable for the user.
     """
     import uuid
-    print(f"Creating timetable - User: {uid}, Title: {title}, Term: {term}")
+    logger.info("Creating timetable uid=%s term=%s", _safe_uid(uid), term)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
         
@@ -286,7 +304,9 @@ def create_timetable(uid: str, title: str, term: str) -> dict:
         doc = user_ref.get()
         data = doc.to_dict() or {} if doc.exists else {}
         
-        timetables = data.get("timetables", [])
+        timetables = _cap_timetables(data.get("timetables", []))
+        if len(timetables) >= MAX_TIMETABLES_PER_USER:
+            return {"error": f"Timetable limit reached. You can keep up to {MAX_TIMETABLES_PER_USER} timetables."}
         new_id = str(uuid.uuid4())
         
         new_tt = {
@@ -381,7 +401,7 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
 
         return candidate_start < existing_end and existing_start < candidate_end
 
-    print(f"Adding course to timetable - User: {uid}, Term: {term}, Course: {course_code}, Sections: {sections}")
+    logger.info("Adding course to timetable uid=%s term=%s course=%s sections=%s", _safe_uid(uid), term, course_code, len(sections or []))
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
     
@@ -409,7 +429,7 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
         doc = user_ref.get()
         data = doc.to_dict() or {} if doc.exists else {}
         
-        timetables = data.get("timetables", [])
+        timetables = _cap_timetables(data.get("timetables", []))
         active_id = data.get("activeTimetableId")
         target_idx = -1
         
@@ -430,6 +450,8 @@ def add_course_to_timetable(uid: str, term: str, course_code: str, sections: lis
             user_ref.set({"activeTimetableId": new_id}, merge=True)
             
         scheduled_courses = timetables[target_idx].get("courses", [])
+        if len(scheduled_courses) + len(sections) > MAX_COURSES_PER_TIMETABLE:
+            return {"error": f"Course limit reached. A timetable can contain up to {MAX_COURSES_PER_TIMETABLE} sections."}
         
         added_count = 0
         added_components = []
@@ -492,7 +514,7 @@ def delete_course_from_timetable(uid: str, term: str, course_code: str) -> dict:
     """
     Deletes a specific course from the user's timetable.
     """
-    print(f"Deleting course from timetable - User: {uid}, Term: {term}, Course: {course_code}")
+    logger.info("Deleting course from timetable uid=%s term=%s course=%s", _safe_uid(uid), term, course_code)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
     
@@ -505,7 +527,7 @@ def delete_course_from_timetable(uid: str, term: str, course_code: str) -> dict:
             return {"message": "User document not found."}
             
         data = doc.to_dict() or {}
-        timetables = data.get("timetables", [])
+        timetables = _cap_timetables(data.get("timetables", []))
         active_id = data.get("activeTimetableId")
         target_idx = -1
         for i, t in enumerate(timetables):
@@ -536,7 +558,7 @@ def clear_timetable(uid: str, term: str) -> dict:
     """
     Clears the user's timetable for a specific term.
     """
-    print(f"Clearing timetable - User: {uid}, Term: {term}")
+    logger.info("Clearing timetable uid=%s term=%s", _safe_uid(uid), term)
     if not firebase_admin._apps:
         return {"error": "Firebase Admin SDK is not initialized."}
     
@@ -549,7 +571,7 @@ def clear_timetable(uid: str, term: str) -> dict:
             return {"message": "User document not found."}
             
         data = doc.to_dict() or {}
-        timetables = data.get("timetables", [])
+        timetables = _cap_timetables(data.get("timetables", []))
         active_id = data.get("activeTimetableId")
         target_idx = -1
         for i, t in enumerate(timetables):

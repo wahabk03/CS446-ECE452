@@ -469,7 +469,13 @@ Column(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { filePickerLauncher.launch(arrayOf("*/*")) }) {
+                IconButton(
+                    onClick = {
+                        filePickerLauncher.launch(
+                            arrayOf("application/pdf", "text/plain", "text/markdown", "text/csv")
+                        )
+                    }
+                ) {
                     Icon(imageVector = Icons.Default.Add, contentDescription = "Add File/Attachment")
                 }
                 

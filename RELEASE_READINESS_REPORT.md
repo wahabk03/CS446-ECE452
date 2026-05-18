@@ -1,14 +1,12 @@
 # Release Readiness Report
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 This document tracks the current issues found during a full repository scan. Use the checkboxes as a lightweight release checklist: when an item is fixed, check it off and add a short note or PR/commit reference.
 
 ## Executive Summary
 
-The app now builds with `./gradlew assembleDebug`, but it is not yet ready for public store distribution without a few production-readiness fixes. The Android client is generally functional, but the AI agent path is still configured as a local/demo backend (`http://10.0.2.2:5000`) and the Flask server trusts a client-supplied `uid`. That is the biggest security and billing risk because anyone who can reach the backend could impersonate users and spend API quota.
-
-Android lint was also run with `./gradlew lintDebug`. It currently fails with 4 errors, all caused by `NotificationHelper.createChannel()` using Android 8.0+ notification channel APIs while `minSdk` is 24.
+The app now builds with `./gradlew assembleDebug`, `./gradlew lintDebug` passes, and the Android app can talk to the Railway-hosted agent backend. The largest remaining work is release-store polish, legal/privacy flows, longer-term Firestore schema migration, and release signing/branding.
 
 ## App Workflow Notes
 
@@ -45,30 +43,35 @@ Android lint was also run with `./gradlew lintDebug`. It currently fails with 4 
 
 ### High
 
-- [ ] **Android lint fails on notification channel API level**
+- [x] **Android lint fails on notification channel API level**
   - **File:** `app/src/main/java/com/example/graphicaltimeplanner/NotificationHelper.kt`
   - **Problem:** `NotificationChannel` and `createNotificationChannel` require API 26, but `minSdk` is 24.
   - **Fix proposal:** Wrap channel creation with `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { ... }`. Keep notification display code compatible with API 24+.
+  - **Fix note:** Implemented API-level guard and verified with `./gradlew lintDebug`.
 
-- [ ] **Debug Firebase placeholder is not a real release config**
+- [x] **Debug Firebase placeholder is not a real release config**
   - **File:** `app/src/debug/google-services.json`
   - **Problem:** The placeholder allows debug builds only. Release builds need a real Firebase Android app config and matching package/SHA settings.
   - **Fix proposal:** Keep placeholder in `src/debug`; add the real `app/google-services.json` or release-only config through secure CI/secrets before publishing. Do not commit service account keys.
+  - **Fix note:** `.gitignore` now ignores `google-services.json` broadly. Local/CI builds should provide the real Firebase config outside Git.
 
-- [ ] **Sensitive and verbose logging**
+- [x] **Sensitive and verbose logging**
   - **Files:** `CourseRepository.kt`, `CourseMessagingService.kt`, `agent/server_agent.py`, `agent/tools.py`, `agent/agent.py`
   - **Problem:** Logs include course/profile data, FCM token, tool responses, uploaded file paths/content-derived data, and API error bodies. This risks privacy leakage in production logs.
   - **Fix proposal:** Gate Android debug logs with `BuildConfig.DEBUG`, remove FCM token logging, replace backend `print` calls with structured logs that redact UID, tokens, uploaded content, and LLM response bodies.
+  - **Fix note:** Android debug logs are gated or removed for FCM tokens/data. Backend uses structured logging with hashed UIDs and no longer logs tool response bodies or provider response text.
 
-- [ ] **Backend uploads have no size/type limits**
+- [x] **Backend uploads have no size/type limits**
   - **Files:** `AgentApi.kt`, `agent/server_agent.py`, `agent/tools.py`
   - **Problem:** Android reads the entire file into memory and base64 encodes it; Flask decodes the entire payload into temp storage. Large files can crash the client/server or inflate LLM prompts.
   - **Fix proposal:** Restrict accepted MIME types to PDF/text, enforce client and server max size, truncate extracted text to a token/character budget, and reject encrypted/unparseable PDFs cleanly.
+  - **Fix note:** Android picker now requests PDF/text-like files and enforces a 5 MB read cap. Backend accepts `.pdf`, `.txt`, `.md`, `.csv`, enforces `AGENT_MAX_UPLOAD_BYTES`, and truncates extracted text with `AGENT_MAX_EXTRACTED_FILE_CHARS`.
 
-- [ ] **Firestore user document may grow too large**
+- [x] **Firestore user document may grow too large**
   - **Files:** `CourseRepository.kt`, `ChatRepository.kt`, `agent/tools.py`
   - **Problem:** All timetables are stored as arrays inside `users/{uid}`. Firestore documents have a size limit; many timetables/courses can hit it. Chat sessions store all messages in one session document, which can also grow large.
   - **Fix proposal:** Move timetables to `users/{uid}/timetables/{timetableId}` and messages to `users/{uid}/agent/history/sessions/{sessionId}/messages/{messageId}` or enforce hard caps.
+  - **Fix note:** Added immediate hard caps: 12 timetables/user, 50 course sections/timetable, 30 chat sessions, 80 messages/session, 8k chars/message, plus assistant-state caps. Longer-term subcollection migration is still a better scaling architecture.
 
 - [ ] **Agent timetable writes are non-transactional**
   - **Files:** `agent/tools.py`, `CourseRepository.kt`
@@ -136,14 +139,11 @@ Android lint was also run with `./gradlew lintDebug`. It currently fails with 4 
 
 ## Suggested Fix Order
 
-1. Fix `NotificationHelper` API guard and rerun `./gradlew lintDebug`.
-2. Add production backend authentication with Firebase ID token verification.
-3. Split debug/release backend URLs and remove release cleartext traffic.
-4. Add quotas, rate limits, usage metering, and upload limits before any public beta.
-5. Decide Firestore schema migration for timetables/chat history before user growth.
-6. Add Privacy Policy, Terms, AI disclaimer, and data deletion flow.
-7. Configure release signing, real Firebase release config, app icon/brand, and store metadata.
-8. Clean logs, old screens, unused resources, and dependency warnings.
+1. Decide Firestore schema migration for timetables/chat history before user growth.
+2. Add Privacy Policy, Terms, AI disclaimer, and data deletion flow.
+3. Configure release signing, real Firebase release config, app icon/brand, and store metadata.
+4. Clean old screens, unused resources, and dependency warnings.
+5. Add production analytics and monitoring for quota, backend errors, and retention.
 
 ## Commercial Plan
 
@@ -210,5 +210,37 @@ Graphical Time Planner should be positioned as a Waterloo-focused schedule plann
 
 ## Verification Log
 
-- `./gradlew assembleDebug`: Passed after adding debug-only Firebase placeholder.
-- `./gradlew lintDebug`: Failed with 4 `NewApi` errors in `NotificationHelper.kt`; report also listed 57 warnings and 7 hints.
+- `PYTHONPYCACHEPREFIX=/private/tmp/cs446_pycache python3 -m py_compile agent/server_agent.py agent/tools.py agent/agent.py agent/llm_config.py`: Passed.
+- `./gradlew assembleDebug`: Passed.
+- `./gradlew lintDebug`: Passed.
+
+## App Test Plan
+
+Use this checklist after rebuilding and reinstalling the app:
+
+1. **Chat without upload**
+   - Sign in.
+   - Open Chatbot.
+   - Send a short message such as "Summarize my current timetable."
+   - Expected: the model replies, tool-status messages may appear, and the app does not crash.
+
+2. **Allowed upload**
+   - In Chatbot, attach a small `.pdf` or `.txt` file under 5 MB.
+   - Ask a question about the file.
+   - Expected: the attachment chip appears, the message sends, and the model replies.
+
+3. **Blocked upload**
+   - Try attaching a non-text file such as `.jpg`, `.png`, `.zip`, or any file over 5 MB.
+   - Expected: the app or backend rejects it with a readable error instead of hanging or crashing.
+
+4. **Chat history cap**
+   - Send several messages in one chat and revisit Chat History.
+   - Expected: recent messages remain; very long-term stress testing should keep only the latest capped messages/sessions.
+
+5. **Timetable cap smoke test**
+   - Create and edit normal timetables.
+   - Expected: ordinary workflows are unchanged. Stress accounts with more than 12 timetables or more than 50 sections per timetable should be capped when saved/loaded.
+
+6. **Log privacy check**
+   - Watch Android Logcat and Railway logs while sending chat and uploads.
+   - Expected: no FCM token, raw UID, full tool response, uploaded file content, or provider response body is printed.
