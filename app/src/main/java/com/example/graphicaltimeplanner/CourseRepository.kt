@@ -644,6 +644,50 @@ object CourseRepository {
         }
         return changes
     }
+
+    suspend fun deleteUserAccount() {
+        val auth = FirebaseAuth.getInstance()
+        val uid = auth.currentUser?.uid ?: return
+        val userRef = db.collection("users").document(uid)
+
+        // Delete chat sessions subcollection (best-effort; failure here is non-fatal)
+        try {
+            val sessions = userRef.collection("agent")
+                .document("history")
+                .collection("sessions")
+                .get().await()
+            if (!sessions.isEmpty) {
+                val sessionsRef = userRef.collection("agent").document("history").collection("sessions")
+                val batch = db.batch()
+                for (doc in sessions) { batch.delete(sessionsRef.document(doc.id)) }
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                    batch.commit()
+                        .addOnSuccessListener { cont.resumeWith(Result.success(Unit)) }
+                        .addOnFailureListener { cont.resumeWith(Result.success(Unit)) }
+                }
+            }
+        } catch (e: Exception) {
+            debugLog("Session cleanup failed: ${e.message}")
+        }
+
+        // Delete main user document (timetables, profile, assistant state)
+        kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+            userRef.delete()
+                .addOnSuccessListener { cont.resumeWith(Result.success(Unit)) }
+                .addOnFailureListener { e: Exception -> cont.resumeWith(Result.failure(e)) }
+        }
+
+        // Delete Firebase Auth account — may throw FirebaseAuthRecentLoginRequiredException
+        kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+            val task = auth.currentUser?.delete()
+            if (task != null) {
+                task.addOnSuccessListener { cont.resumeWith(Result.success(Unit)) }
+                    .addOnFailureListener { e: Exception -> cont.resumeWith(Result.failure(e)) }
+            } else {
+                cont.resumeWith(Result.success(Unit))
+            }
+        }
+    }
 }
 
 data class CourseChange(

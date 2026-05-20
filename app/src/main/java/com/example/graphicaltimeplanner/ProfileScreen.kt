@@ -40,7 +40,9 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onViewTerms: () -> Unit = {},
+    onViewPrivacy: () -> Unit = {}
 ) {
     val primaryYellow = Color(0xFFFFD700)
     val lightBackground = Color(0xFFF5F5F5)
@@ -97,6 +99,10 @@ fun ProfileScreen(
     var notifLectureChanges by remember { mutableStateOf(true) }
     var notifNewSections by remember { mutableStateOf(true) }
     var notifConflicts by remember { mutableStateOf(true) }
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    var deleteLoading by remember { mutableStateOf(false) }
 
     // Load saved preferences from Firestore
     LaunchedEffect(Unit) {
@@ -919,11 +925,122 @@ fun ProfileScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color(0xFFEEEEEE))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TextButton(
+                            onClick = onViewTerms,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
+                        ) {
+                            Text("Terms of Use", fontSize = 14.sp, color = primaryYellow)
+                        }
+                        TextButton(
+                            onClick = onViewPrivacy,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
+                        ) {
+                            Text("Privacy Policy", fontSize = 14.sp, color = primaryYellow)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 6. Danger Zone ────────────────────────────────────────────────
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5F5)),
+                elevation = CardDefaults.cardElevation(1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Danger Zone",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFB71C1C)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Permanently deletes your account, timetables, academic profile, and chat history. This cannot be undone.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF666666)
+                    )
+                    deleteError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showDeleteDialog = true; deleteError = null },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFD32F2F),
+                            contentColor = Color.White
+                        ),
+                        enabled = !deleteLoading
+                    ) {
+                        if (deleteLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 3.dp)
+                        } else {
+                            Text("Delete Account", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete account?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This will permanently delete your account, all timetables, academic profile, and chat history. This action cannot be undone.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        deleteLoading = true
+                        deleteError = null
+                        coroutineScope.launch {
+                            try {
+                                CourseRepository.deleteUserAccount()
+                                AppState.logout()
+                                onLogout()
+                            } catch (e: Exception) {
+                                val msg = e.message ?: ""
+                                deleteError = when {
+                                    msg.contains("recent") || msg.contains("credential") ->
+                                        "Please sign out and sign back in, then try again."
+                                    else -> e.localizedMessage ?: "Failed to delete account."
+                                }
+                            } finally {
+                                deleteLoading = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("Delete", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

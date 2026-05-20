@@ -93,10 +93,11 @@ The app now builds with `./gradlew assembleDebug`, `./gradlew lintDebug` passes,
   - **Fix proposal:** Ask after the user adds courses or in profile notification settings, explain why notifications help, and show a settings route if denied.
   - **Fix note:** Permission is now deferred until the user has at least one course scheduled. A rationale dialog ("Stay updated on course changes") appears with Allow / Not now. The choice is persisted in `SharedPreferences` (`notif_perm_asked`) so the prompt never repeats. If denied, a dismissible amber banner appears on the home screen offering a direct link to the app's notification Settings page.
 
-- [ ] **No Terms/Privacy/AI disclaimer flow**
+- [x] **No Terms/Privacy/AI disclaimer flow**
   - **Files:** UI screens, README/deployment docs
   - **Problem:** The app handles profile data, schedules, transcript uploads, advisor email drafting, and LLM-generated academic advice. Store review and user trust need clear disclosure.
   - **Fix proposal:** Add Privacy Policy, Terms, AI limitations disclaimer, data deletion instructions, and transcript-upload consent text.
+  - **Fix note:** `LegalContent.kt` contains full Terms of Use and Privacy Policy as structured `LegalSection` lists (10 sections each, covering AI disclaimer, file uploads, Firebase/Anthropic/SerpAPI third parties, data deletion instructions, children's privacy, and UW affiliation). `LegalScreen.kt` renders them as a scrollable Scaffold. `NavGraph.kt` routes `"legal/{type}"` to the screen. The Register screen shows "By creating an account you agree to our Terms of Use and Privacy Policy" with tappable links below the Create Account button. The Profile screen's About card has Terms of Use and Privacy Policy text buttons.
 
 - [ ] **Program/advisor data can become stale**
   - **Files:** `parse/script_populate_programs.py`, `CourseRepository.kt`, `AdvisorScreen.kt`

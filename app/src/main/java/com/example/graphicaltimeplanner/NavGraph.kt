@@ -35,9 +35,9 @@ fun NavGraph(
                         popUpTo("register") { inclusive = true }
                     }
                 },
-                onLoginClick = {
-                    navController.popBackStack()
-                }
+                onLoginClick = { navController.popBackStack() },
+                onViewTerms = { navController.navigate("legal/terms") },
+                onViewPrivacy = { navController.navigate("legal/privacy") }
             )
         }
 
@@ -109,11 +109,22 @@ fun NavGraph(
 
         composable("profile") {
             ProfileScreen(
-                onBack   = { navController.popBackStack() },
-                onLogout = {
+                onBack      = { navController.popBackStack() },
+                onLogout    = {
                     AppState.logout()
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                }
+                },
+                onViewTerms   = { navController.navigate("legal/terms") },
+                onViewPrivacy = { navController.navigate("legal/privacy") }
+            )
+        }
+
+        composable("legal/{type}") { backStack ->
+            val type = backStack.arguments?.getString("type") ?: "terms"
+            LegalScreen(
+                title    = if (type == "terms") "Terms of Use" else "Privacy Policy",
+                sections = if (type == "terms") LegalContent.TERMS_SECTIONS else LegalContent.PRIVACY_SECTIONS,
+                onBack   = { navController.popBackStack() }
             )
         }
 

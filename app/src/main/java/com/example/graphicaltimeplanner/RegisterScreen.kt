@@ -2,6 +2,7 @@
 package com.example.graphicaltimeplanner
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,7 +52,9 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    onViewTerms: () -> Unit = {},
+    onViewPrivacy: () -> Unit = {}
 ) {
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -330,7 +333,41 @@ fun RegisterScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "By creating an account you agree to our ",
+                    fontSize = 12.sp,
+                    color = Color(0xFF888888)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Terms of Use",
+                    fontSize = 12.sp,
+                    color = primaryYellow,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { onViewTerms() }
+                )
+                Text(text = " and ", fontSize = 12.sp, color = Color(0xFF888888))
+                Text(
+                    text = "Privacy Policy",
+                    fontSize = 12.sp,
+                    color = primaryYellow,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { onViewPrivacy() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically
